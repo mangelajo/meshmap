@@ -7,9 +7,13 @@ requires-python = ">=3.12"
 dependencies = [
     "meshcore",
     "cryptography>=42.0.0",
+    "rich>=13.0.0",
+    "PyNaCl>=1.5.0",
+    "click>=8.0.0",
+    "pyyaml>=6.0.0",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "pytest>=8.0.0",
     "pytest-cov>=4.1.0",
@@ -30,7 +34,12 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]
-ignore = []
+ignore = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

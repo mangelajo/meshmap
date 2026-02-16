@@ -16,7 +16,7 @@ test: ## Run tests with coverage
 	uv run pytest
 
 lint: ## Run linting checks
-	uv run ruff check .
+	uv run ruff check --fix .
 	uv run mypy meshmap
 
 format: ## Format code with ruff

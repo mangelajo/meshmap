@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MeshMap Network Explorer</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0d1117;
+      color: #c9d1d9;
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 13px;
+      overflow: hidden;
+    }
+
+    svg {
+      width: 100vw;
+      height: 100vh;
+      display: block;
+    }
+
+    /* Edges */
+    .link-path {
+      stroke-linecap: round;
+      fill: none;
+      cursor: pointer;
+    }
+    .link-label {
+      font-size: 9px;
+      text-anchor: middle;
+      dominant-baseline: middle;
+      pointer-events: none;
+      /* dark halo makes text readable on any background */
+      paint-order: stroke;
+      stroke: #0d1117;
+      stroke-width: 3px;
+      stroke-linejoin: round;
+    }
+
+    /* Nodes */
+    .node circle {
+      stroke-width: 2px;
+      cursor: pointer;
+      transition: r 0.15s ease;
+    }
+    .node circle:hover { stroke-width: 3px; }
+    .node text {
+      font-size: 11px;
+      fill: #8b949e;
+      pointer-events: none;
+      text-anchor: middle;
+      dominant-baseline: hanging;
+    }
+
+    /* Currently-visiting blink */
+    @keyframes visiting-blink {
+      0%, 100% { fill: inherit; stroke: inherit; stroke-width: 2px; }
+      50%       { fill: #ffffff; stroke: #ffffff; stroke-width: 5px; }
+    }
+    .node.visiting circle {
+      animation: visiting-blink 0.9s ease-in-out infinite;
+    }
+
+    /* Status bar */
+    #status {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      background: rgba(13, 17, 23, 0.88);
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 8px 14px;
+      font-size: 12px;
+      line-height: 1.7;
+      min-width: 220px;
+      backdrop-filter: blur(4px);
+    }
+    #status .title {
+      font-size: 14px;
+      font-weight: bold;
+      color: #58a6ff;
+      margin-bottom: 4px;
+    }
+    #status .stat { color: #8b949e; }
+    #status .stat span { color: #c9d1d9; }
+    #status .mode { color: #3fb950; font-size: 11px; margin-top: 4px; }
+
+    /* Legend */
+    #legend {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      background: rgba(13, 17, 23, 0.88);
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-size: 12px;
+      line-height: 2;
+      backdrop-filter: blur(4px);
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #8b949e;
+    }
+    .legend-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.3);
+      flex-shrink: 0;
+    }
+
+    /* Tooltip */
+    #tooltip {
+      position: fixed;
+      background: rgba(13, 17, 23, 0.95);
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-size: 12px;
+      line-height: 1.8;
+      pointer-events: none;
+      display: none;
+      max-width: 300px;
+      z-index: 100;
+    }
+    #tooltip .tt-name { font-size: 14px; color: #58a6ff; font-weight: bold; margin-bottom: 4px; }
+    #tooltip .tt-row { color: #8b949e; }
+    #tooltip .tt-row span { color: #c9d1d9; }
+
+    /* Controls */
+    #controls {
+      position: fixed;
+      bottom: 12px;
+      left: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      background: rgba(13, 17, 23, 0.88);
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 10px 12px;
+      backdrop-filter: blur(4px);
+    }
+    #search-row {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+    #search-box {
+      flex: 1;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      color: #c9d1d9;
+      font-size: 12px;
+      font-family: inherit;
+      padding: 5px 8px;
+      outline: none;
+      min-width: 0;
+    }
+    #search-box:focus { border-color: #388bfd; }
+    #search-box::placeholder { color: #484f58; }
+    #search-clear {
+      background: none;
+      border: none;
+      color: #6e7681;
+      font-size: 15px;
+      padding: 0 4px;
+      cursor: pointer;
+      line-height: 1;
+    }
+    #search-clear:hover { color: #c9d1d9; background: none; }
+    #btn-row { display: flex; gap: 8px; }
+    button {
+      background: #21262d;
+      border: 1px solid #30363d;
+      color: #c9d1d9;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      font-family: inherit;
+    }
+    button:hover { background: #30363d; }
+    button.active { background: #1f6feb; border-color: #388bfd; color: #fff; }
+
+    /* Sliders */
+    .sl-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: #8b949e;
+    }
+    .sl-lbl { min-width: 38px; }
+    .sl-val { min-width: 22px; text-align: right; color: #c9d1d9; font-variant-numeric: tabular-nums; }
+    input[type=range] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 90px;
+      height: 4px;
+      background: #30363d;
+      border-radius: 2px;
+      outline: none;
+      cursor: pointer;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #58a6ff;
+      cursor: pointer;
+    }
+    .sl-sep { color: #6e7681; }
+  </style>
+</head>
+<body>
+  <svg id="graph">
+    <defs>
+      <!-- Arrow marker: tip is at refX/refY, inherits stroke colour via context-stroke -->
+      <marker id="arrow" markerWidth="8" markerHeight="8" refX="8" refY="4"
+              orient="auto" markerUnits="userSpaceOnUse">
+        <path d="M0,0 L8,4 L0,8 L2,4 Z" fill="context-stroke" stroke="none"/>
+      </marker>
+    </defs>
+  </svg>
+
+  <div id="status">
+    <div class="title">MeshMap</div>
+    <div class="stat">Nodes: <span id="s-nodes">0</span></div>
+    <div class="stat">Edges: <span id="s-edges">0</span></div>
+    <div class="stat">Visited: <span id="s-visited">0</span></div>
+    <div class="stat">Pending: <span id="s-pending">0</span></div>
+    <div class="stat">Failed: <span id="s-failed">0</span></div>
+  </div>
+
+  <div id="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#3fb950"></div> Repeater (visited)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#388bfd"></div> Node</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#6e7681"></div> Unknown</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#f0883e; opacity:0.5"></div> Repeater (failed)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#f0883e"></div> Repeater (pending)</div>
+  </div>
+
+  <div id="controls">
+    <div id="search-row">
+      <input type="text" id="search-box" placeholder="Search nodes…" autocomplete="off" spellcheck="false">
+      <button id="search-clear" title="Clear search">×</button>
+    </div>
+    <div id="btn-row">
+      <button id="btn-labels" class="active" title="Toggle node labels">Labels</button>
+      <button id="btn-reset" title="Reset zoom to fit all nodes">Reset View</button>
+    </div>
+    <div class="sl-row" title="Filter nodes by BFS exploration depth">
+      <span class="sl-lbl">Depth</span>
+      <span class="sl-val" id="lbl-dmin">0</span>
+      <input type="range" id="sl-dmin" min="0" max="10" value="0" step="1">
+      <span class="sl-sep">–</span>
+      <input type="range" id="sl-dmax" min="0" max="10" value="10" step="1">
+      <span class="sl-val" id="lbl-dmax">10</span>
+    </div>
+    <div class="sl-row" title="Spread nodes further apart in force layout">
+      <span class="sl-lbl">Spread</span>
+      <input type="range" id="sl-spread" min="50" max="500" value="110" step="10">
+      <span class="sl-val" id="lbl-spread">110</span>
+    </div>
+    <div class="sl-row" title="How strongly nodes repel each other">
+      <span class="sl-lbl">Repulsion</span>
+      <input type="range" id="sl-charge" min="50" max="1500" value="1500" step="50">
+      <span class="sl-val" id="lbl-charge">1500</span>
+    </div>
+    <div class="sl-row" title="How strongly nodes are pulled to their depth ring (0 = free force layout, 1 = rigid rings)">
+      <span class="sl-lbl">Ring pull</span>
+      <input type="range" id="sl-radial" min="0" max="100" value="10" step="5">
+      <span class="sl-val" id="lbl-radial">0.10</span>
+    </div>
+    <div class="sl-row" title="Preferred distance between directly connected nodes">
+      <span class="sl-lbl">Link length</span>
+      <input type="range" id="sl-linkdist" min="30" max="2000" value="430" step="10">
+      <span class="sl-val" id="lbl-linkdist">430</span>
+    </div>
+    <label class="sl-row" title="Hide nodes with no contact information (type = unknown)" style="cursor:pointer;user-select:none">
+      <input type="checkbox" id="cb-hide-unknown" checked style="accent-color:#58a6ff;cursor:pointer">
+      <span style="color:#c9d1d9">Hide unknown nodes</span>
+    </label>
+    <label class="sl-row" title="Show only edges where both sides report hearing each other" style="cursor:pointer;user-select:none">
+      <input type="checkbox" id="cb-bidir" checked style="accent-color:#58a6ff;cursor:pointer">
+      <span style="color:#c9d1d9">Bidirectional edges only</span>
+    </label>
+  </div>
+
+  <div id="tooltip"></div>
+
+  <script>
+  'use strict';
+
+  // ── State ──────────────────────────────────────────────────────────────────
+  let allNodes = [], allLinks = [];
+  let simulation = null;
+  let linkGroupSel = null, nodeSel = null;  // persistent D3 selections
+  let showLabels = true;
+  let lastPollOk = false;
+  let lastStructureKey = ''; // fingerprint of node IDs + edge pairs
+
+  let hoveredNodeId = null;
+  let currentlyVisitingId = null;
+
+  // Filter / spread state
+  let filterMinDepth = 0;
+  let filterMaxDepth = 10;
+  let spreadPx = 110;        // pixels per depth level for radial force
+  let maxKnownDepth = 0;     // updated as data arrives
+  let hideUnknown = true;
+  let onlyBidir = true;
+  let chargeStrength = -1500; // node repulsion (negative = repel)
+  let radialStrength = 0.10;  // 0 = free force layout, 1 = strict depth rings
+  let linkDistance = 430;     // preferred edge length in pixels
+  let searchQuery = '';      // current search string (empty = no filter)
+
+  const width = () => window.innerWidth;
+  const height = () => window.innerHeight;
+
+  // ── SVG setup ─────────────────────────────────────────────────────────────
+  const svgEl = document.getElementById('graph');
+  const gZoom = d3.select(svgEl).append('g').attr('class', 'zoom-root');
+  const gLinks = gZoom.append('g').attr('class', 'links');
+  const gNodes = gZoom.append('g').attr('class', 'nodes');
+
+  const zoomBehavior = d3.zoom()
+    .scaleExtent([0.05, 30])
+    .on('zoom', e => gZoom.attr('transform', e.transform));
+  d3.select(svgEl).call(zoomBehavior);
+
+  // ── Tooltip ───────────────────────────────────────────────────────────────
+  const tooltip = document.getElementById('tooltip');
+
+  function fmtSnr(v) {
+    return v != null ? `${v > 0 ? '+' : ''}${v.toFixed(1)} dB` : '—';
+  }
+
+  function showNodeTooltip(event, d) {
+    const edges = allLinks.filter(l =>
+      (l.source.id || l.source) === d.id || (l.target.id || l.target) === d.id
+    );
+    const allSnrs = edges.flatMap(l => [l.snr_a_hears_b, l.snr_b_hears_a]).filter(s => s != null);
+    const bestSnr = allSnrs.length ? Math.max(...allSnrs) : null;
+
+    let html = `<div class="tt-name">${d.name || 'Unknown'}</div>`;
+    html += `<div class="tt-row">Type: <span>${d.type}</span></div>`;
+    html += `<div class="tt-row">Depth: <span>${d.depth}</span></div>`;
+    if (d.lat != null) html += `<div class="tt-row">Lat: <span>${d.lat.toFixed(5)}</span></div>`;
+    if (d.lon != null) html += `<div class="tt-row">Lon: <span>${d.lon.toFixed(5)}</span></div>`;
+    if (bestSnr != null) html += `<div class="tt-row">Best SNR: <span>${fmtSnr(bestSnr)}</span></div>`;
+    html += `<div class="tt-row" style="margin-top:4px;font-size:10px;color:#6e7681">${d.id.substring(0, 32)}…</div>`;
+    if (d.last_visited) {
+      const dt = new Date(d.last_visited);
+      html += `<div class="tt-row">Visited: <span>${dt.toLocaleTimeString()}</span></div>`;
+    }
+    tooltip.innerHTML = html;
+    tooltip.style.display = 'block';
+    moveTooltip(event);
+  }
+
+  function showLinkTooltip(event, d) {
+    const na = typeof d.source === 'object' ? d.source : { id: d.source, name: null };
+    const nb = typeof d.target === 'object' ? d.target : { id: d.target, name: null };
+    const nameA = na.name || (na.id || '').substring(0, 12) + '…';
+    const nameB = nb.name || (nb.id || '').substring(0, 12) + '…';
+
+    let html = `<div class="tt-name" style="font-size:12px">${nameA} ↔ ${nameB}</div>`;
+    html += `<div class="tt-row" style="margin-top:4px">`;
+    html += `${nameA} → ${nameB}: <span>${fmtSnr(d.snr_b_hears_a)}</span></div>`;
+    html += `<div class="tt-row">`;
+    html += `${nameB} → ${nameA}: <span>${fmtSnr(d.snr_a_hears_b)}</span></div>`;
+    const dt = d.last_seen ? new Date(d.last_seen) : null;
+    if (dt) html += `<div class="tt-row" style="margin-top:4px">Updated: <span>${dt.toLocaleTimeString()}</span></div>`;
+
+    tooltip.innerHTML = html;
+    tooltip.style.display = 'block';
+    moveTooltip(event);
+  }
+
+  // Keep showTooltip as alias for node hover
+  const showTooltip = showNodeTooltip;
+
+  function moveTooltip(event) {
+    const x = event.clientX + 14, y = event.clientY - 10;
+    tooltip.style.left = Math.min(x, window.innerWidth - 320) + 'px';
+    tooltip.style.top = Math.max(y, 4) + 'px';
+  }
+
+  function hideTooltip() { tooltip.style.display = 'none'; }
+
+  // ── Colour helpers ────────────────────────────────────────────────────────
+  function nodeColor(d) {
+    if (d.type === 'repeater') {
+      if (d.failed) return '#f0883e';
+      if (!d.visited) return '#f0883e';
+      return '#3fb950';
+    }
+    if (d.type === 'node') return '#388bfd';
+    return '#6e7681';
+  }
+
+  function nodeRadius(d) { return d.type === 'repeater' ? 10 : 7; }
+
+  function linkColor(snr) {
+    if (snr == null) return '#555';
+    if (snr >= 5)  return '#3fb950';
+    if (snr >= -5) return '#d29922';
+    return '#f85149';
+  }
+
+  function linkWidth(snr) {
+    if (snr == null) return 1;
+    return Math.max(1, Math.min(5, (snr + 20) / 8));
+  }
+
+  // Perpendicular offset: returns [ox, oy] to shift a line sideways by OFFSET px.
+  const LINK_OFFSET = 4;
+  function perpOffset(sx, sy, tx, ty, side) {
+    const dx = tx - sx, dy = ty - sy;
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+    return [(-dy / len) * LINK_OFFSET * side, (dx / len) * LINK_OFFSET * side];
+  }
+
+  // Trim a line segment by trimStart px at the start and trimEnd px at the end.
+  // Returns {x1,y1,x2,y2} or null if the remaining length would be ≤ 0.
+  function trimLine(sx, sy, tx, ty, trimStart, trimEnd) {
+    const dx = tx - sx, dy = ty - sy;
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+    if (len <= trimStart + trimEnd + 1) return null;
+    const ux = dx / len, uy = dy / len;
+    return {
+      x1: sx + ux * trimStart, y1: sy + uy * trimStart,
+      x2: tx - ux * trimEnd,   y2: ty - uy * trimEnd,
+    };
+  }
+
+  // ── Change detection ──────────────────────────────────────────────────────
+  // Fingerprint based only on graph structure (IDs + edges), not metadata.
+  function structureKey(nodes, links) {
+    const nk = nodes.map(n => n.id).sort().join(',');
+    const lk = links.map(l => {
+      const s = typeof l.source === 'object' ? l.source.id : l.source;
+      const t = typeof l.target === 'object' ? l.target.id : l.target;
+      return s < t ? `${s}~${t}` : `${t}~${s}`;
+    }).sort().join(',');
+    return `${nk}|${lk}`;
+  }
+
+  // ── DOM-only attribute update (no layout recomputation) ───────────────────
+  function updateAttributes() {
+    if (!nodeSel || !linkGroupSel) return;
+    nodeSel
+      .classed('visiting', d => d.id === currentlyVisitingId);
+    nodeSel.select('circle')
+      .attr('r', nodeRadius)
+      .attr('fill', nodeColor)
+      .attr('stroke', d => d3.color(nodeColor(d)).brighter(0.5).toString());
+    nodeSel.select('text')
+      .text(d => showLabels ? (d.name || d.id.substring(0, 8) + '…') : '')
+      .attr('dy', d => nodeRadius(d) + 4);
+    // a→b line: a transmits, b receives — quality = snr_b_hears_a
+    linkGroupSel.select('.link-ab')
+      .attr('stroke', d => linkColor(d.snr_b_hears_a))
+      .attr('stroke-width', d => d.snr_b_hears_a != null ? linkWidth(d.snr_b_hears_a) : 0)
+      .attr('stroke-opacity', 0.7)
+      .attr('marker-end', d => d.snr_b_hears_a != null ? 'url(#arrow)' : null);
+    linkGroupSel.select('.link-label-ab')
+      .text(d => d.snr_b_hears_a != null ? fmtSnr(d.snr_b_hears_a) : '')
+      .attr('fill', d => linkColor(d.snr_b_hears_a));
+    // b→a line: b transmits, a receives — quality = snr_a_hears_b
+    linkGroupSel.select('.link-ba')
+      .attr('stroke', d => linkColor(d.snr_a_hears_b))
+      .attr('stroke-width', d => d.snr_a_hears_b != null ? linkWidth(d.snr_a_hears_b) : 0)
+      .attr('stroke-opacity', 0.7)
+      .attr('marker-end', d => d.snr_a_hears_b != null ? 'url(#arrow)' : null);
+    linkGroupSel.select('.link-label-ba')
+      .text(d => d.snr_a_hears_b != null ? fmtSnr(d.snr_a_hears_b) : '')
+      .attr('fill', d => linkColor(d.snr_a_hears_b));
+    applyOpacity();
+  }
+
+  function updatePositions() {
+    if (!linkGroupSel || !nodeSel) return;
+    linkGroupSel.each(function(d) {
+      const sx = d.source.x || 0, sy = d.source.y || 0;
+      const tx = d.target.x || 0, ty = d.target.y || 0;
+      const hasBoth = d.snr_b_hears_a != null && d.snr_a_hears_b != null;
+      const rA = nodeRadius(d.source), rB = nodeRadius(d.target);
+      const g = d3.select(this);
+
+      // a→b path (source→target, listener = b): trim start by rA, end by rB
+      const [ox1, oy1] = hasBoth ? perpOffset(sx, sy, tx, ty, +1) : [0, 0];
+      if (d.snr_b_hears_a != null) {
+        const p = trimLine(sx+ox1, sy+oy1, tx+ox1, ty+oy1, rA, rB);
+        g.select('.link-ab').attr('d', p ? `M ${p.x1} ${p.y1} L ${p.x2} ${p.y2}` : '');
+      } else {
+        g.select('.link-ab').attr('d', '');
+      }
+      g.select('.link-label-ab')
+        .attr('x', (sx + tx) / 2 + ox1)
+        .attr('y', (sy + ty) / 2 + oy1);
+
+      // b→a path (target→source, listener = a): trim start by rB, end by rA
+      const [ox2, oy2] = hasBoth ? perpOffset(sx, sy, tx, ty, -1) : [0, 0];
+      if (d.snr_a_hears_b != null) {
+        const p = trimLine(tx+ox2, ty+oy2, sx+ox2, sy+oy2, rB, rA);
+        g.select('.link-ba').attr('d', p ? `M ${p.x1} ${p.y1} L ${p.x2} ${p.y2}` : '');
+      } else {
+        g.select('.link-ba').attr('d', '');
+      }
+      g.select('.link-label-ba')
+        .attr('x', (sx + tx) / 2 + ox2)
+        .attr('y', (sy + ty) / 2 + oy2);
+    });
+    nodeSel.attr('transform', d => `translate(${d.x || 0},${d.y || 0})`);
+  }
+
+  // ── Drag behaviour ────────────────────────────────────────────────────────
+  function makeDrag() {
+    return d3.drag()
+      .on('start', (event, d) => {
+        if (simulation && !event.active) simulation.alphaTarget(0.1).restart();
+        d.fx = d.x; d.fy = d.y;
+      })
+      .on('drag', (event, d) => {
+        d.fx = event.x; d.fy = event.y;
+      })
+      .on('end', (event, d) => {
+        if (simulation && !event.active) simulation.alphaTarget(0);
+        d.fx = null; d.fy = null;
+      });
+  }
+
+  // ── Opacity: hover highlight + search (hover wins when active) ────────────
+  function applyOpacity() {
+    if (!nodeSel || !linkGroupSel) return;
+
+    if (hoveredNodeId != null) {
+      // Hover: highlight node + direct neighbours, dim everything else
+      const connectedIds = new Set([hoveredNodeId]);
+      linkGroupSel.each(d => {
+        const s = d.source.id || d.source;
+        const t = d.target.id || d.target;
+        if (s === hoveredNodeId || t === hoveredNodeId) { connectedIds.add(s); connectedIds.add(t); }
+      });
+      nodeSel.attr('opacity', d => connectedIds.has(d.id) ? null : 0.1);
+      linkGroupSel.attr('opacity', d => {
+        const s = d.source.id || d.source, t = d.target.id || d.target;
+        return (s === hoveredNodeId || t === hoveredNodeId) ? null : 0.08;
+      });
+    } else if (searchQuery) {
+      // Search: highlight matching nodes + their edges, dim the rest
+      const q = searchQuery.toLowerCase();
+      const matchIds = new Set();
+      nodeSel.each(d => {
+        if ((d.name && d.name.toLowerCase().includes(q)) || d.id.toLowerCase().includes(q))
+          matchIds.add(d.id);
+      });
+      nodeSel.attr('opacity', d => matchIds.has(d.id) ? null : 0.08);
+      linkGroupSel.attr('opacity', d => {
+        const s = d.source.id || d.source, t = d.target.id || d.target;
+        return (matchIds.has(s) || matchIds.has(t)) ? null : 0.05;
+      });
+    } else {
+      nodeSel.attr('opacity', null);
+      linkGroupSel.attr('opacity', null);
+    }
+  }
+
+  function setHighlight(nodeId) {
+    hoveredNodeId = nodeId;
+    applyOpacity();
+  }
+
+  // ── Depth filter helpers ───────────────────────────────────────────────────
+  function getFilteredData() {
+    let nodes = allNodes.filter(n => {
+      const d = n.depth || 0;
+      if (d < filterMinDepth || d > filterMaxDepth) return false;
+      if (hideUnknown && n.type === 'unknown') return false;
+      return true;
+    });
+    const visIds = new Set(nodes.map(n => n.id));
+    let links = allLinks.filter(l => {
+      const s = typeof l.source === 'object' ? l.source.id : l.source;
+      const t = typeof l.target === 'object' ? l.target.id : l.target;
+      if (!visIds.has(s) || !visIds.has(t)) return false;
+      if (onlyBidir && (l.snr_a_hears_b == null || l.snr_b_hears_a == null)) return false;
+      return true;
+    });
+    if (onlyBidir) {
+      // Drop nodes that have no surviving bidirectional edge
+      const connectedIds = new Set();
+      links.forEach(l => {
+        connectedIds.add(typeof l.source === 'object' ? l.source.id : l.source);
+        connectedIds.add(typeof l.target === 'object' ? l.target.id : l.target);
+      });
+      nodes = nodes.filter(n => connectedIds.has(n.id));
+    }
+    return { nodes, links };
+  }
+
+  function applyFilter() {
+    const { nodes, links } = getFilteredData();
+    lastStructureKey = structureKey(nodes, links);
+    render(nodes, links);
+  }
+
+  // ── Full layout render (called only when structure changes) ───────────────
+  function render(nodes, links) {
+    // Resolve link endpoints to node objects
+    const nodeById = new Map(nodes.map(n => [n.id, n]));
+    links.forEach(l => {
+      if (typeof l.source !== 'object') l.source = nodeById.get(l.source) || { id: l.source, x: 0, y: 0 };
+      if (typeof l.target !== 'object') l.target = nodeById.get(l.target) || { id: l.target, x: 0, y: 0 };
+    });
+
+    // Stop any running simulation
+    if (simulation) { simulation.stop(); simulation = null; }
+
+    nodes.forEach(n => { n.fx = null; n.fy = null; });
+
+    simulation = d3.forceSimulation(nodes)
+      .force('link', d3.forceLink(links).id(d => d.id).distance(linkDistance).strength(0.2))
+      .force('charge', d3.forceManyBody().strength(chargeStrength).distanceMax(600))
+      .force('center', d3.forceCenter(width() / 2, height() / 2).strength(0.03))
+      .force('collision', d3.forceCollide(40))
+      .force('radial', d3.forceRadial(
+        n => (n.depth || 0) * spreadPx,
+        width() / 2, height() / 2
+      ).strength(radialStrength))
+      .alphaDecay(0.02)
+      .on('tick', updatePositions);
+
+    // Rebuild DOM selections
+    linkGroupSel = gLinks.selectAll('.link-group')
+      .data(links, d => {
+        const s = d.source.id || d.source;
+        const t = d.target.id || d.target;
+        return s < t ? `${s}~${t}` : `${t}~${s}`;
+      })
+      .join(enter => {
+        const g = enter.append('g').attr('class', 'link-group');
+        // a→b path + label: a transmits, b receives
+        g.append('path').attr('class', 'link-path link-ab');
+        g.append('text').attr('class', 'link-label link-label-ab');
+        // b→a path + label: b transmits, a receives
+        g.append('path').attr('class', 'link-path link-ba');  // noqa: spell-ignore
+        g.append('text').attr('class', 'link-label link-label-ba');
+        return g;
+      })
+      .on('mouseover', showLinkTooltip)
+      .on('mousemove', moveTooltip)
+      .on('mouseout', hideTooltip);
+
+    nodeSel = gNodes.selectAll('.node')
+      .data(nodes, d => d.id)
+      .join(enter => {
+        const g = enter.append('g').attr('class', 'node');
+        g.append('circle');
+        g.append('text');
+        return g;
+      })
+      .call(makeDrag())
+      .on('mouseover', showNodeTooltip)
+      .on('mousemove', moveTooltip)
+      .on('mouseout', hideTooltip)
+      .on('mouseover.hl', (event, d) => setHighlight(d.id))
+      .on('mouseout.hl', () => setHighlight(null));
+
+    updateAttributes();
+    updatePositions(); // place everything at computed positions immediately
+    if (hoveredNodeId) setHighlight(hoveredNodeId); // re-apply if still hovering
+  }
+
+  // ── Data polling ──────────────────────────────────────────────────────────
+  async function poll() {
+    try {
+      const res = await fetch('/graph.json');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+
+      currentlyVisitingId = data.currently_visiting || null;
+
+      // Always update status bar counters
+      const s = data.stats || {};
+      document.getElementById('s-nodes').textContent = s.total_nodes ?? data.nodes.length;
+      document.getElementById('s-edges').textContent = s.total_edges ?? data.links.length;
+      document.getElementById('s-visited').textContent = s.visited ?? '—';
+      document.getElementById('s-pending').textContent = s.pending ?? '—';
+      document.getElementById('s-failed').textContent = s.failed ?? '—';
+
+      // Update depth slider bounds if new deeper nodes arrived
+      const newMaxDepth = Math.max(0, ...data.nodes.map(n => n.depth || 0));
+      if (newMaxDepth !== maxKnownDepth) {
+        maxKnownDepth = newMaxDepth;
+        document.getElementById('sl-dmin').max = maxKnownDepth;
+        document.getElementById('sl-dmax').max = maxKnownDepth;
+        // If the max slider was at its previous ceiling, follow it up
+        if (filterMaxDepth >= maxKnownDepth - 1) {
+          filterMaxDepth = maxKnownDepth;
+          document.getElementById('sl-dmax').value = filterMaxDepth;
+          document.getElementById('lbl-dmax').textContent = filterMaxDepth;
+        }
+      }
+
+      // Detect whether graph structure (nodes/edges) has changed
+      const { nodes: visNodes, links: visLinks } = getFilteredData();
+      const key = structureKey(visNodes, visLinks);
+      const structureChanged = key !== lastStructureKey;
+
+      // Merge metadata into existing node objects, preserving x/y/fx/fy
+      const nodeById = new Map(allNodes.map(n => [n.id, n]));
+      data.nodes.forEach(n => {
+        const ex = nodeById.get(n.id);
+        if (ex) {
+          // Only update metadata — never touch x, y, vx, vy, fx, fy
+          ex.name = n.name; ex.type = n.type; ex.depth = n.depth;
+          ex.visited = n.visited; ex.failed = n.failed;
+          ex.lat = n.lat; ex.lon = n.lon;
+          ex.last_visited = n.last_visited;
+        } else {
+          allNodes.push(n); // new node — will be positioned by render()
+        }
+      });
+      const newIds = new Set(data.nodes.map(n => n.id));
+      allNodes = allNodes.filter(n => newIds.has(n.id));
+      allLinks = data.links;
+
+      if (structureChanged) {
+        lastStructureKey = key;
+        render(visNodes, visLinks);
+      } else {
+        // Metadata only changed (e.g. a node became "visited", or a new SNR
+        // direction arrived) — repaint colours and recompute path offsets.
+        updateAttributes();
+        updatePositions();
+      }
+
+      lastPollOk = true;
+    } catch (e) {
+      lastPollOk = false;
+    }
+  }
+
+  // ── Controls ──────────────────────────────────────────────────────────────
+  document.getElementById('btn-labels').addEventListener('click', function () {
+    showLabels = !showLabels;
+    this.classList.toggle('active', showLabels);
+    gNodes.selectAll('.node text')
+      .text(d => showLabels ? (d.name || d.id.substring(0, 8) + '…') : '');
+  });
+
+  document.getElementById('btn-reset').addEventListener('click', () => {
+    d3.select(svgEl).transition().duration(500)
+      .call(zoomBehavior.transform, d3.zoomIdentity);
+  });
+
+  window.addEventListener('resize', () => {
+    if (simulation) {
+      simulation.force('center', d3.forceCenter(width() / 2, height() / 2).strength(0.05));
+    }
+  });
+
+  // ── Depth & spread sliders ────────────────────────────────────────────────
+  document.getElementById('sl-dmin').addEventListener('input', function () {
+    filterMinDepth = +this.value;
+    // Clamp: min ≤ max
+    if (filterMinDepth > filterMaxDepth) {
+      filterMaxDepth = filterMinDepth;
+      document.getElementById('sl-dmax').value = filterMaxDepth;
+      document.getElementById('lbl-dmax').textContent = filterMaxDepth;
+    }
+    document.getElementById('lbl-dmin').textContent = filterMinDepth;
+    applyFilter();
+  });
+
+  document.getElementById('sl-dmax').addEventListener('input', function () {
+    filterMaxDepth = +this.value;
+    // Clamp: max ≥ min
+    if (filterMaxDepth < filterMinDepth) {
+      filterMinDepth = filterMaxDepth;
+      document.getElementById('sl-dmin').value = filterMinDepth;
+      document.getElementById('lbl-dmin').textContent = filterMinDepth;
+    }
+    document.getElementById('lbl-dmax').textContent = filterMaxDepth;
+    applyFilter();
+  });
+
+  document.getElementById('sl-spread').addEventListener('input', function () {
+    spreadPx = +this.value;
+    document.getElementById('lbl-spread').textContent = spreadPx;
+    applyFilter();
+  });
+
+  document.getElementById('sl-charge').addEventListener('input', function () {
+    chargeStrength = -(+this.value);
+    document.getElementById('lbl-charge').textContent = +this.value;
+    if (simulation) { simulation.force('charge').strength(chargeStrength); simulation.alpha(0.3).restart(); }
+  });
+
+  document.getElementById('sl-radial').addEventListener('input', function () {
+    radialStrength = this.value / 100;
+    document.getElementById('lbl-radial').textContent = radialStrength.toFixed(2);
+    if (simulation) { simulation.force('radial').strength(radialStrength); simulation.alpha(0.3).restart(); }
+  });
+
+  document.getElementById('sl-linkdist').addEventListener('input', function () {
+    linkDistance = +this.value;
+    document.getElementById('lbl-linkdist').textContent = linkDistance;
+    if (simulation) { simulation.force('link').distance(linkDistance); simulation.alpha(0.3).restart(); }
+  });
+
+  document.getElementById('cb-hide-unknown').addEventListener('change', function () {
+    hideUnknown = this.checked;
+    applyFilter();
+  });
+
+  document.getElementById('cb-bidir').addEventListener('change', function () {
+    onlyBidir = this.checked;
+    applyFilter();
+  });
+
+  // ── Search ────────────────────────────────────────────────────────────────
+  document.getElementById('search-box').addEventListener('input', function () {
+    searchQuery = this.value.trim();
+    applyOpacity();
+  });
+
+  document.getElementById('search-clear').addEventListener('click', function () {
+    searchQuery = '';
+    document.getElementById('search-box').value = '';
+    applyOpacity();
+  });
+
+  // ── Bootstrap ─────────────────────────────────────────────────────────────
+  poll();
+  setInterval(poll, 3000);
+  </script>
+</body>
+</html>

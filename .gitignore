@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Testing & coverage
+.coverage
+.pytest_cache/
+
+# Virtual environments
+.venv/
+
+# Keys / secrets
+my_real_key.txt
+mykey
+myotherkey
+
+# Local reference repos
+ref/
+
+# uv
+uv.lock
