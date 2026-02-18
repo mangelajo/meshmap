@@ -30,11 +30,7 @@ class PacketSniffer:
         self._packet_count: int = 0
         self._contact_map: dict[str, str] = {}
 
-    def _render_decrypted(
-        self,
-        decoded: decoder.DecodedPacket,
-        show_hexdump: bool
-    ) -> list[str]:
+    def _render_decrypted(self, decoded: decoder.DecodedPacket, show_hexdump: bool) -> list[str]:
         """Render decrypted content from a fully-populated DecodedPacket.
 
         All data is read exclusively from the model; no dict access here.
@@ -48,9 +44,7 @@ class PacketSniffer:
         """
         lines: list[str] = []
 
-        lines.append(
-            f"[green]Decrypted:[/green] [dim](using {decoded.decrypted_by})[/dim]"
-        )
+        lines.append(f"[green]Decrypted:[/green] [dim](using {decoded.decrypted_by})[/dim]")
 
         if decoded.src_name:
             lines.append(f"  [dim]From:[/dim] [green]{decoded.src_name}[/green]")
@@ -76,13 +70,13 @@ class PacketSniffer:
             lines.append(f"  [dim]Request Type:[/dim] [cyan]{decoded.req_type_name}[/cyan]")
             if decoded.req_data_hex:
                 lines.append(f"  [dim]Request Data:[/dim] {len(decoded.req_data_hex) // 2} bytes")
-                for line in decoder.format_hexdump(bytes.fromhex(decoded.req_data_hex)).split('\n'):
+                for line in decoder.format_hexdump(bytes.fromhex(decoded.req_data_hex)).split("\n"):
                     lines.append(f"    [dim]{line}[/dim]")
 
         # RESPONSE fields
         if decoded.resp_data_hex:
             lines.append(f"  [dim]Response Data:[/dim] {len(decoded.resp_data_hex) // 2} bytes")
-            for line in decoder.format_hexdump(bytes.fromhex(decoded.resp_data_hex)).split('\n'):
+            for line in decoder.format_hexdump(bytes.fromhex(decoded.resp_data_hex)).split("\n"):
                 lines.append(f"    [dim]{line}[/dim]")
 
         # GET_NEIGHBORS fields
@@ -91,7 +85,7 @@ class PacketSniffer:
             count = decoded.resp_neighbours_results_count or 0
             lines.append(f"  [dim]Neighbors:[/dim] {count} of {total} total")
             for nb in decoded.resp_neighbours_list:
-                secs = nb['heard_seconds_ago']
+                secs = nb["heard_seconds_ago"]
                 if secs < 60:
                     time_str = f"{secs}s ago"
                 elif secs < 3600:
@@ -101,7 +95,7 @@ class PacketSniffer:
                 else:
                     time_str = f"{secs // 86400}d ago"
 
-                snr = nb['snr']
+                snr = nb["snr"]
                 sc = snr_color(snr)
 
                 line = (
@@ -109,7 +103,7 @@ class PacketSniffer:
                     f"{time_str:8s} - "
                     f"SNR [{sc}]{snr:6.2f}[/{sc}] dB"
                 )
-                if nb.get('name'):
+                if nb.get("name"):
                     line += f" - [cyan]{nb['name']}[/cyan]"
                 lines.append(line)
 
@@ -117,7 +111,7 @@ class PacketSniffer:
         if decoded.path_return_len is not None:
             lines.append(f"  [dim]Return Path Length:[/dim] {decoded.path_return_len} hops")
             if decoded.path_return_hops:
-                hops = ', '.join(decoded.path_return_hops)
+                hops = ", ".join(decoded.path_return_hops)
                 lines.append(f"  [dim]Return Path:[/dim] [yellow]{hops}[/yellow]")
             if decoded.path_extra_type_name:
                 lines.append(
@@ -141,9 +135,7 @@ class PacketSniffer:
             lines.append(f"  [dim]From:[/dim] [green]{decoded.grp_sender_name}[/green]")
         if decoded.grp_timestamp:
             try:
-                ts_str = datetime.fromtimestamp(decoded.grp_timestamp).strftime(
-                    '%Y-%m-%d %H:%M:%S'
-                )
+                ts_str = datetime.fromtimestamp(decoded.grp_timestamp).strftime("%Y-%m-%d %H:%M:%S")
                 lines.append(f"  [dim]Time:[/dim] {ts_str}")
             except (ValueError, OSError):
                 pass
@@ -164,7 +156,7 @@ class PacketSniffer:
         if show_hexdump and decoded.decrypted_plaintext_hex:
             plaintext_bytes = bytes.fromhex(decoded.decrypted_plaintext_hex)
             lines.append("  [dim]Hexdump:[/dim]")
-            for line in decoder.format_hexdump(plaintext_bytes).split('\n'):
+            for line in decoder.format_hexdump(plaintext_bytes).split("\n"):
                 lines.append(f"    [dim]{line}[/dim]")
 
         return lines
@@ -190,7 +182,7 @@ class PacketSniffer:
 
         self._contact_map = {}
         for public_key, contact in contacts.items():
-            name = contact.get('adv_name', 'Unknown')
+            name = contact.get("adv_name", "Unknown")
             if len(public_key) >= 8:
                 self._contact_map[public_key[:8].lower()] = name
 
@@ -208,8 +200,8 @@ class PacketSniffer:
             output = []
 
             # Signal info with color coding
-            rssi = data.get('rssi', 0)
-            snr = data.get('snr', 0)
+            rssi = data.get("rssi", 0)
+            snr = data.get("snr", 0)
             rssi_color = "green" if rssi > -80 else "yellow" if rssi > -100 else "red"
             sc = snr_color(snr)
             output.append(
@@ -217,8 +209,8 @@ class PacketSniffer:
                 f"SNR=[{sc}]{snr}[/{sc}] dB"
             )
 
-            raw_hex = data.get('raw_hex', '')
-            payload_len = data.get('payload_length', 0)
+            raw_hex = data.get("raw_hex", "")
+            payload_len = data.get("payload_length", 0)
             output.append(f"[dim]Length:[/dim] {payload_len} bytes")
 
             # Extract actual mesh packet (skip SNR and RSSI bytes)
@@ -247,14 +239,14 @@ class PacketSniffer:
             if decoded.payload_type:
                 ptype = decoded.payload_type
                 type_colors = {
-                    'ADVERT': 'yellow',
-                    'TXT_MSG': 'green',
-                    'GRP_TXT': 'cyan',
-                    'REQ': 'blue',
-                    'RESPONSE': 'blue',
-                    'ACK': 'dim'
+                    "ADVERT": "yellow",
+                    "TXT_MSG": "green",
+                    "GRP_TXT": "cyan",
+                    "REQ": "blue",
+                    "RESPONSE": "blue",
+                    "ACK": "dim",
                 }
-                type_color = type_colors.get(ptype, 'white')
+                type_color = type_colors.get(ptype, "white")
                 output.append(f"  [dim]Type:[/dim]    [{type_color}]{ptype}[/{type_color}]")
 
             # Show payload version
@@ -263,7 +255,7 @@ class PacketSniffer:
 
             # Show transport codes if present
             if decoded.transport_codes:
-                codes = ', '.join(decoded.transport_codes)
+                codes = ", ".join(decoded.transport_codes)
                 output.append(f"[dim]Transport codes:[/dim] {codes}")
 
             # Show path information
@@ -277,7 +269,7 @@ class PacketSniffer:
 
                         if contacts_list:
                             # Show contact names
-                            contact_names = ', '.join(contacts_list)
+                            contact_names = ", ".join(contacts_list)
                             if len(contacts_list) > 1:
                                 matches_text = f"[dim]({len(contacts_list)} matches)[/dim]"
                                 output.append(
@@ -318,16 +310,19 @@ class PacketSniffer:
 
                 if decoded.advert_timestamp:
                     from datetime import datetime as dt
+
                     try:
                         ts_str = dt.fromtimestamp(decoded.advert_timestamp)
-                        ts_formatted = ts_str.strftime('%Y-%m-%d %H:%M:%S')
+                        ts_formatted = ts_str.strftime("%Y-%m-%d %H:%M:%S")
                         output.append(f"  [dim]Timestamp:[/dim] {ts_formatted}")
                     except (ValueError, OSError):
                         ts_raw = decoded.advert_timestamp
                         output.append(f"  [dim]Timestamp:[/dim] {ts_raw} [red](invalid)[/red]")
 
                 if decoded.advert_signature:
-                    output.append(f"  [dim]Signature:[/dim] [cyan]{decoded.advert_signature}[/cyan]")
+                    output.append(
+                        f"  [dim]Signature:[/dim] [cyan]{decoded.advert_signature}[/cyan]"
+                    )
 
                 if decoded.advert_type:
                     output.append(f"  [dim]Type:[/dim] [cyan]{decoded.advert_type}[/cyan]")
@@ -351,13 +346,11 @@ class PacketSniffer:
                     )
 
                 if decoded.advert_app_data_len:
-                    output.append(
-                        f"  [dim]App Data:[/dim] {decoded.advert_app_data_len} bytes"
-                    )
+                    output.append(f"  [dim]App Data:[/dim] {decoded.advert_app_data_len} bytes")
                     if show_hexdump and decoded.advert_app_data_hex:
                         app_data_bytes = bytes.fromhex(decoded.advert_app_data_hex)
                         output.append("  [dim]App Data Hexdump:[/dim]")
-                        for line in decoder.format_hexdump(app_data_bytes).split('\n'):
+                        for line in decoder.format_hexdump(app_data_bytes).split("\n"):
                             output.append(f"    [dim]{line}[/dim]")
 
             # Show ANON_REQ sender
@@ -393,14 +386,14 @@ class PacketSniffer:
                 # Show DISCOVER_REQ details
                 if decoded.control_subtype == "DISCOVER_REQ":
                     if decoded.discover_tag:
-                        output.append(f"  [dim]Discovery Tag:[/dim] [cyan]{decoded.discover_tag}[/cyan]")
+                        output.append(
+                            f"  [dim]Discovery Tag:[/dim] [cyan]{decoded.discover_tag}[/cyan]"
+                        )
                     if decoded.discover_adv_types:
                         types_str = ", ".join(decoded.discover_adv_types)
                         output.append(f"  [dim]Looking for:[/dim] [yellow]{types_str}[/yellow]")
                     if decoded.discover_since_datetime:
-                        output.append(
-                            f"  [dim]Since:[/dim] {decoded.discover_since_datetime}"
-                        )
+                        output.append(f"  [dim]Since:[/dim] {decoded.discover_since_datetime}")
 
                 # Show DISCOVER_RESP details
                 elif decoded.control_subtype == "DISCOVER_RESP":
@@ -414,7 +407,9 @@ class PacketSniffer:
                             f"  [dim]Reported SNR:[/dim] [{sc}]{decoded.discover_snr:.2f}[/{sc}] dB"
                         )
                     if decoded.discover_tag:
-                        output.append(f"  [dim]Discovery Tag:[/dim] [cyan]{decoded.discover_tag}[/cyan]")
+                        output.append(
+                            f"  [dim]Discovery Tag:[/dim] [cyan]{decoded.discover_tag}[/cyan]"
+                        )
                     if decoded.discover_pubkey:
                         key_type = "full key" if decoded.discover_pubkey_full else "prefix"
                         output.append(
@@ -439,7 +434,9 @@ class PacketSniffer:
             if decoded.trace_flags:
                 output.append(f"[dim]Trace Flags:[/dim] [cyan]{decoded.trace_flags}[/cyan]")
                 if decoded.trace_path_hash_size:
-                    output.append(f"  [dim]Path Hash Size:[/dim] {decoded.trace_path_hash_size} bytes")
+                    output.append(
+                        f"  [dim]Path Hash Size:[/dim] {decoded.trace_path_hash_size} bytes"
+                    )
 
             if decoded.trace_path_hashes:
                 output.append("[dim]Trace Path Hashes:[/dim]")
@@ -447,13 +444,13 @@ class PacketSniffer:
                     output.append(f"  Hop {i}: [yellow]{hop_hash}[/yellow]")
 
             if decoded.trace_snr_values:
-                snr_str = ', '.join(f"{snr:.1f} dB" for snr in decoded.trace_snr_values)
+                snr_str = ", ".join(f"{snr:.1f} dB" for snr in decoded.trace_snr_values)
                 output.append(f"[dim]Trace SNR Values:[/dim] [green]{snr_str}[/green]")
 
             if decoded.trace_path_data and not decoded.trace_path_hashes:
                 # Fallback: show raw path data if not parsed
                 path_bytes = bytes.fromhex(decoded.trace_path_data)
-                path_str = ' '.join(f"{b:02x}" for b in path_bytes)
+                path_str = " ".join(f"{b:02x}" for b in path_bytes)
                 output.append(f"[dim]Trace Path Data:[/dim] [yellow]{path_str}[/yellow]")
 
             # Show channel for group messages
@@ -465,19 +462,17 @@ class PacketSniffer:
                 output.append(f"[dim]MAC:[/dim] [cyan]{decoded.mac}[/cyan]")
 
             if decoded.encrypted_len:
-                output.append(
-                    f"[dim]Encrypted:[/dim] {decoded.encrypted_len} bytes"
-                )
+                output.append(f"[dim]Encrypted:[/dim] {decoded.encrypted_len} bytes")
 
             # Show payload summary
             if decoded.payload_len:
-                payload_type = decoded.payload_type or ''
-                if payload_type in ['REQ', 'RESPONSE', 'TXT_MSG']:
+                payload_type = decoded.payload_type or ""
+                if payload_type in ["REQ", "RESPONSE", "TXT_MSG"]:
                     output.append(
                         f"[dim]Payload:[/dim] {decoded.payload_len} bytes "
                         f"[yellow](encrypted)[/yellow]"
                     )
-                elif payload_type in ['GRP_TXT', 'GRP_DATA']:
+                elif payload_type in ["GRP_TXT", "GRP_DATA"]:
                     output.append(
                         f"[dim]Payload:[/dim] {decoded.payload_len} bytes "
                         f"[yellow](encrypted group msg)[/yellow]"
@@ -487,21 +482,21 @@ class PacketSniffer:
 
                 # Try to decrypt payload if private keys are provided
                 if private_keys and decoded.payload_hex:
-                    payload_type = decoded.payload_type or ''
-                    if payload_type in ['REQ', 'RESPONSE', 'TXT_MSG', 'PATH', 'ANON_REQ']:
+                    payload_type = decoded.payload_type or ""
+                    if payload_type in ["REQ", "RESPONSE", "TXT_MSG", "PATH", "ANON_REQ"]:
                         decrypted = False
                         for key_info in private_keys:
                             try:
                                 result = crypto.decrypt_packet_payload(
                                     packet_type=payload_type,
                                     payload_hex=decoded.payload_hex,
-                                    private_key_hex=key_info['hex'],
+                                    private_key_hex=key_info["hex"],
                                     contacts=contacts,
-                                    debug=self.debug
+                                    debug=self.debug,
                                 )
-                                if result and result.get('success'):
+                                if result and result.get("success"):
                                     decoder.apply_decryption_to_packet(
-                                        decoded, result, key_info['file']
+                                        decoded, result, key_info["file"]
                                     )
                                     decrypted = True
                                     break
@@ -520,20 +515,17 @@ class PacketSniffer:
 
                 # Try to decrypt group messages if channel names provided
                 if channel_names and decoded.payload_hex:
-                    payload_type = decoded.payload_type or ''
-                    if payload_type in ['GRP_TXT', 'GRP_DATA']:
+                    payload_type = decoded.payload_type or ""
+                    if payload_type in ["GRP_TXT", "GRP_DATA"]:
                         try:
                             result = crypto.decrypt_group_message(
-                                payload_hex=decoded.payload_hex,
-                                channel_names=channel_names
+                                payload_hex=decoded.payload_hex, channel_names=channel_names
                             )
-                            if result and result.get('success'):
+                            if result and result.get("success"):
                                 decoder.apply_decryption_to_packet(decoded, result)
                                 output.extend(self._render_decrypted(decoded, show_hexdump))
-                            elif result and result.get('error') and self.debug:
-                                output.append(
-                                    f"[red]Group decrypt failed:[/red] {result['error']}"
-                                )
+                            elif result and result.get("error") and self.debug:
+                                output.append(f"[red]Group decrypt failed:[/red] {result['error']}")
                         except Exception as e:
                             if self.debug:
                                 output.append(f"[red]Group decrypt error:[/red] {e}")
@@ -542,7 +534,7 @@ class PacketSniffer:
             if packet_hex:
                 packet_bytes = bytes.fromhex(packet_hex)
                 output.append("[dim]Raw:[/dim]")
-                for line in decoder.format_hexdump(packet_bytes).split('\n'):
+                for line in decoder.format_hexdump(packet_bytes).split("\n"):
                     output.append(f"  [dim]{line}[/dim]")
 
             if decoded.decode_error:
@@ -567,7 +559,7 @@ class PacketSniffer:
         duration: int,
         private_keys: list[dict[str, str]] | None,
         channel_names: list[str] | None,
-        show_hexdump: bool
+        show_hexdump: bool,
     ) -> None:
         """Sniff and decode RF packets showing detailed information.
 

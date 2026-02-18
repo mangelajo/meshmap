@@ -19,18 +19,20 @@ from meshmap.scanner import MeshScanner
 @click.command()
 @click.pass_context
 @click.option(
-    '--output', '-o',
-    type=click.Choice(['table', 'json', 'yaml'], case_sensitive=False),
-    default='table',
+    "--output",
+    "-o",
+    type=click.Choice(["table", "json", "yaml"], case_sensitive=False),
+    default="table",
     show_default=True,
-    help='Output format.'
+    help="Output format.",
 )
 @click.option(
-    '--wait', '-w',
+    "--wait",
+    "-w",
     default=10,
     show_default=True,
     type=int,
-    help='Seconds to listen for discovery responses.'
+    help="Seconds to listen for discovery responses.",
 )
 def discover_repeaters(ctx, output: str, wait: int):
     """Discover repeaters reachable at 0 hops (directly connected).
@@ -38,15 +40,17 @@ def discover_repeaters(ctx, output: str, wait: int):
     Sends a NODE_DISCOVER_REQ control packet and collects responses from
     nearby repeaters for WAIT seconds.
     """
-    asyncio.run(_discover_repeaters(
-        ctx.obj['serial_port'],
-        ctx.obj['debug'],
-        ctx.obj['baudrate'],
-        output,
-        wait,
-        ctx.obj.get('sniff_active', False),
-        ctx.obj.get('sniff_keys', []),
-    ))
+    asyncio.run(
+        _discover_repeaters(
+            ctx.obj["serial_port"],
+            ctx.obj["debug"],
+            ctx.obj["baudrate"],
+            output,
+            wait,
+            ctx.obj.get("sniff_active", False),
+            ctx.obj.get("sniff_keys", []),
+        )
+    )
 
 
 async def _discover_repeaters(
@@ -72,9 +76,9 @@ async def _discover_repeaters(
 
         repeaters = await scanner.discover_zero_hop_repeaters(wait_time=wait)
 
-        if output == 'json':
+        if output == "json":
             click.echo(json.dumps(repeaters, indent=2))
-        elif output == 'yaml':
+        elif output == "yaml":
             click.echo(yaml.dump(repeaters, allow_unicode=True), nl=False)
         else:
             _print_table(repeaters)
@@ -88,6 +92,7 @@ async def _discover_repeaters(
         click.echo(f"Error: {e}", err=True)
         if debug:
             import traceback
+
             traceback.print_exc()
         sys.exit(1)
 
@@ -104,30 +109,28 @@ def _print_table(repeaters: list[dict[str, Any]]) -> None:
 
     repeaters_sorted = sorted(
         repeaters,
-        key=lambda r: r.get('snr') or float('-inf'),
+        key=lambda r: r.get("snr") or float("-inf"),
         reverse=True,
     )
 
     for node in repeaters_sorted:
-        lat = node.get('lat')
-        lon = node.get('lon')
-        ts = node.get('last_advert')
-        last_advert = (
-            datetime.fromtimestamp(ts, tz=UTC).strftime('%Y-%m-%d %H:%M:%S') if ts else ''
-        )
-        snr = node.get('snr')
+        lat = node.get("lat")
+        lon = node.get("lon")
+        ts = node.get("last_advert")
+        last_advert = datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%d %H:%M:%S") if ts else ""
+        snr = node.get("snr")
         if snr is not None:
             sc = snr_color(snr)
             snr_cell = Text(f"{snr:+.1f} dB", style=sc)
         else:
-            snr_cell = Text('—', style='dim')
+            snr_cell = Text("—", style="dim")
 
         table.add_row(
-            node.get('name') or '',
+            node.get("name") or "",
             f"{node['public_key'][:16]}…",
             snr_cell,
-            f"{lat:.5f}" if lat is not None else '',
-            f"{lon:.5f}" if lon is not None else '',
+            f"{lat:.5f}" if lat is not None else "",
+            f"{lon:.5f}" if lon is not None else "",
             last_advert,
         )
 

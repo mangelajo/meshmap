@@ -21,13 +21,15 @@ from meshmap.neighbours import get_neighbours
 @click.command("get-neighbours")
 @click.argument("contact", metavar="CONTACT")
 @click.option(
-    "--password", "-P",
+    "--password",
+    "-P",
     default="",
     show_default=False,
     help="Login password (default: empty string for guest access).",
 )
 @click.option(
-    "--output", "-o",
+    "--output",
+    "-o",
     type=click.Choice(["table", "json", "yaml"], case_sensitive=False),
     default="table",
     show_default=True,
@@ -42,17 +44,19 @@ def get_neighbours_cmd(ctx, contact: str, password: str, output: str) -> None:
 
     Logs in as guest by default; supply -P to use a specific password.
     """
-    asyncio.run(_run(
-        ctx.obj["serial_port"],
-        ctx.obj["baudrate"],
-        ctx.obj["debug"],
-        ctx.obj.get("verbose", False),
-        contact,
-        password,
-        output,
-        ctx.obj.get("sniff_active", False),
-        ctx.obj.get("sniff_keys", []),
-    ))
+    asyncio.run(
+        _run(
+            ctx.obj["serial_port"],
+            ctx.obj["baudrate"],
+            ctx.obj["debug"],
+            ctx.obj.get("verbose", False),
+            contact,
+            password,
+            output,
+            ctx.obj.get("sniff_active", False),
+            ctx.obj.get("sniff_keys", []),
+        )
+    )
 
 
 async def _run(
@@ -68,7 +72,11 @@ async def _run(
 ) -> None:
     try:
         contact, neighbours = await get_neighbours(
-            serial_port, baudrate, debug, contact, password,
+            serial_port,
+            baudrate,
+            debug,
+            contact,
+            password,
             verbose=verbose,
             sniff_keys=sniff_keys if sniff_active else None,
         )

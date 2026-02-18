@@ -10,17 +10,19 @@ from meshmap.scanner import MeshScanner
 
 @click.command()
 @click.pass_context
-@click.option('--verbose', '-v', is_flag=True, help='Enable verbose output')
+@click.option("--verbose", "-v", is_flag=True, help="Enable verbose output")
 def scan(ctx, verbose: bool):
     """Scan for 0-hop nodes (default operation)."""
-    asyncio.run(scan_zero_hop(
-        ctx.obj['serial_port'],
-        ctx.obj['debug'],
-        ctx.obj['baudrate'],
-        verbose,
-        ctx.obj.get('sniff_active', False),
-        ctx.obj.get('sniff_keys', []),
-    ))
+    asyncio.run(
+        scan_zero_hop(
+            ctx.obj["serial_port"],
+            ctx.obj["debug"],
+            ctx.obj["baudrate"],
+            verbose,
+            ctx.obj.get("sniff_active", False),
+            ctx.obj.get("sniff_keys", []),
+        )
+    )
 
 
 async def scan_zero_hop(
@@ -64,5 +66,6 @@ async def scan_zero_hop(
         click.echo(f"\nError: {e}", err=True)
         if debug:
             import traceback
+
             traceback.print_exc()
         sys.exit(1)

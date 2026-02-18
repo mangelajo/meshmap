@@ -21,7 +21,7 @@ class TestMultipartDecoder:
         # Format: [header:1][ack_crc:4]
         header_byte = (2 << 4) | 0x03  # remaining=2, type=ACK
         ack_crc = 0x12345678
-        payload = bytes([header_byte]) + ack_crc.to_bytes(4, 'little')
+        payload = bytes([header_byte]) + ack_crc.to_bytes(4, "little")
 
         packet = DecodedPacket()
         _decode_multipart(packet, payload)
@@ -34,7 +34,7 @@ class TestMultipartDecoder:
     def test_multipart_empty(self) -> None:
         """Test handling of empty MULTIPART payload."""
         packet = DecodedPacket()
-        _decode_multipart(packet, b'')
+        _decode_multipart(packet, b"")
 
         assert packet.multipart_remaining is None
         assert packet.multipart_type is None
@@ -47,7 +47,7 @@ class TestControlDecoder:
         """Test decoding CONTROL packet with zero-hop flag."""
         # Control type with zero-hop flag (0x80) set
         control_type = 0x88  # 0x80 | 0x08
-        control_data = b'\x01\x02\x03\x04'
+        control_data = b"\x01\x02\x03\x04"
         payload = bytes([control_type]) + control_data
 
         packet = DecodedPacket()
@@ -60,7 +60,7 @@ class TestControlDecoder:
     def test_control_non_zero_hop(self) -> None:
         """Test decoding CONTROL packet without zero-hop flag."""
         control_type = 0x08  # No zero-hop flag
-        control_data = b'\xaa\xbb'
+        control_data = b"\xaa\xbb"
         payload = bytes([control_type]) + control_data
 
         packet = DecodedPacket()
@@ -91,7 +91,7 @@ class TestControlDecoder:
         type_filter = 0x04  # Looking for ROOM nodes
         tag = 0xE65084EB
 
-        control_data = bytes([type_filter]) + struct.pack('<I', tag)
+        control_data = bytes([type_filter]) + struct.pack("<I", tag)
         payload = bytes([control_type]) + control_data
 
         packet = DecodedPacket()
@@ -111,9 +111,9 @@ class TestControlDecoder:
         control_type = 0x92  # 0x80 (zero-hop) | (0x9 << 4) = 0x90, plus 0x2 (node_type) = 0x92
         snr_byte = 51  # SNR*4 = 12.75*4 = 51
         tag = 0xE65084EB
-        pubkey = b'\xd2\x59\x0a\xed\x87\x37\x6d\x57'  # 8-byte prefix
+        pubkey = b"\xd2\x59\x0a\xed\x87\x37\x6d\x57"  # 8-byte prefix
 
-        control_data = bytes([snr_byte]) + struct.pack('<I', tag) + pubkey
+        control_data = bytes([snr_byte]) + struct.pack("<I", tag) + pubkey
         payload = bytes([control_type]) + control_data
 
         contact_map = {"d2590aed": "TestNode"}
@@ -249,12 +249,7 @@ class TestFullPacketDecoding:
         control_type = 0x88  # Zero-hop control
         # control_data = b'\x01\x02\x03'  # unused placeholder
 
-        packet_hex = (
-            f"{header:02x}"
-            f"{path_len:02x}"
-            f"{control_type:02x}"
-            f"010203"
-        )
+        packet_hex = f"{header:02x}{path_len:02x}{control_type:02x}010203"
 
         decoded = decode_packet(packet_hex, {})
 
@@ -268,12 +263,12 @@ class TestAdvertDecoder:
     """Test ADVERT payload decoding via _decode_advert()."""
 
     # Shared test fixtures
-    PUBKEY = bytes(range(32))            # 32-byte pubkey: 00 01 02 ... 1f
+    PUBKEY = bytes(range(32))  # 32-byte pubkey: 00 01 02 ... 1f
     TIMESTAMP_INT = 1_234_567_890
-    TIMESTAMP_BYTES = struct.pack('<I', TIMESTAMP_INT)
-    SIGNATURE = b'\xab' * 64            # 64-byte signature placeholder
+    TIMESTAMP_BYTES = struct.pack("<I", TIMESTAMP_INT)
+    SIGNATURE = b"\xab" * 64  # 64-byte signature placeholder
 
-    def _make_payload(self, flags: int, extra: bytes = b'') -> bytes:
+    def _make_payload(self, flags: int, extra: bytes = b"") -> bytes:
         """Build a full advert payload (pubkey + timestamp + signature + app_data)."""
         return self.PUBKEY + self.TIMESTAMP_BYTES + self.SIGNATURE + bytes([flags]) + extra
 
@@ -312,9 +307,9 @@ class TestAdvertDecoder:
 
     def test_flags_with_lat_lon(self) -> None:
         """flags=0x12 (REPEATER + lat/lon bit): lat/lon decoded."""
-        lat = 40_500_000   # 40.5 degrees N
-        lon = -3_700_000   # 3.7 degrees W
-        extra = struct.pack('<i', lat) + struct.pack('<i', lon)
+        lat = 40_500_000  # 40.5 degrees N
+        lon = -3_700_000  # 3.7 degrees W
+        extra = struct.pack("<i", lat) + struct.pack("<i", lon)
         payload = self._make_payload(flags=0x12, extra=extra)  # type=REPEATER(2), lat/lon
         packet = DecodedPacket()
         _decode_advert(packet, payload, {})
@@ -334,9 +329,9 @@ class TestAdvertDecoder:
 
     def test_flags_full_advert(self) -> None:
         """flags=0x93: type=ROOM(3), lat/lon, and name all present."""
-        lat = 48_866_667   # ~48.87 degrees N (Paris)
-        lon = 2_333_333    # ~2.33 degrees E
-        extra = struct.pack('<i', lat) + struct.pack('<i', lon) + b"Paris Hub"
+        lat = 48_866_667  # ~48.87 degrees N (Paris)
+        lon = 2_333_333  # ~2.33 degrees E
+        extra = struct.pack("<i", lat) + struct.pack("<i", lon) + b"Paris Hub"
         payload = self._make_payload(flags=0x93, extra=extra)
         packet = DecodedPacket()
         _decode_advert(packet, payload, {})
@@ -371,7 +366,7 @@ class TestAdvertDecoder:
     def test_too_short_payload(self) -> None:
         """Payload shorter than 32 bytes: nothing decoded."""
         packet = DecodedPacket()
-        _decode_advert(packet, b'\xaa' * 16, {})
+        _decode_advert(packet, b"\xaa" * 16, {})
         assert packet.advert_pubkey is None
         assert packet.advert_timestamp is None
 
@@ -386,44 +381,50 @@ class TestApplyDecryptionToPacket:
 
     def test_no_key_file_leaves_decrypted_by_none(self) -> None:
         packet = DecodedPacket()
-        apply_decryption_to_packet(packet, {'contact_name': 'Alice'}, key_file=None)
+        apply_decryption_to_packet(packet, {"contact_name": "Alice"}, key_file=None)
         assert packet.decrypted_by is None
 
     def test_contact_name_sets_src_name(self) -> None:
         packet = DecodedPacket()
-        apply_decryption_to_packet(packet, {'contact_name': 'Alice'})
-        assert packet.src_name == 'Alice'
+        apply_decryption_to_packet(packet, {"contact_name": "Alice"})
+        assert packet.src_name == "Alice"
 
     def test_txt_msg_fields_mapped(self) -> None:
         packet = DecodedPacket()
-        apply_decryption_to_packet(packet, {
-            'timestamp': 1_234_567_890,
-            'txt_type': 0,
-            'txt_type_name': 'PLAIN',
-            'txt_attempt': 1,
-            'txt_plaintext_message': 'Hello',
-        })
+        apply_decryption_to_packet(
+            packet,
+            {
+                "timestamp": 1_234_567_890,
+                "txt_type": 0,
+                "txt_type_name": "PLAIN",
+                "txt_attempt": 1,
+                "txt_plaintext_message": "Hello",
+            },
+        )
         assert packet.txt_timestamp == 1_234_567_890
         assert packet.txt_type == 0
-        assert packet.txt_type_name == 'PLAIN'
+        assert packet.txt_type_name == "PLAIN"
         assert packet.txt_attempt == 1
-        assert packet.txt_plaintext_message == 'Hello'
+        assert packet.txt_plaintext_message == "Hello"
 
     def test_legacy_plaintext_fallback(self) -> None:
         """Bare 'plaintext' key is mapped when txt_plaintext_message is not set."""
         packet = DecodedPacket()
-        apply_decryption_to_packet(packet, {'plaintext': 'Legacy text'})
-        assert packet.txt_plaintext_message == 'Legacy text'
+        apply_decryption_to_packet(packet, {"plaintext": "Legacy text"})
+        assert packet.txt_plaintext_message == "Legacy text"
 
     def test_response_neighbours_mapped(self) -> None:
-        neighbours = [{'pubkey': 'aabbccdd', 'heard_seconds_ago': 60, 'snr': 8.0}]
+        neighbours = [{"pubkey": "aabbccdd", "heard_seconds_ago": 60, "snr": 8.0}]
         packet = DecodedPacket()
-        apply_decryption_to_packet(packet, {
-            'resp_timestamp': 1_234_567_890,
-            'resp_neighbours_total_count': 3,
-            'resp_neighbours_results_count': 1,
-            'resp_neighbours_list': neighbours,
-        })
+        apply_decryption_to_packet(
+            packet,
+            {
+                "resp_timestamp": 1_234_567_890,
+                "resp_neighbours_total_count": 3,
+                "resp_neighbours_results_count": 1,
+                "resp_neighbours_list": neighbours,
+            },
+        )
         assert packet.resp_timestamp == 1_234_567_890
         assert packet.resp_neighbours_total_count == 3
         assert packet.resp_neighbours_results_count == 1
@@ -431,32 +432,38 @@ class TestApplyDecryptionToPacket:
 
     def test_grp_txt_fields_mapped(self) -> None:
         packet = DecodedPacket()
-        apply_decryption_to_packet(packet, {
-            'channel_name': '#general',
-            'grp_timestamp': 1_234_567_890,
-            'grp_txt_type': 0,
-            'grp_txt_type_name': 'PLAIN',
-            'grp_sender_name': 'Bob',
-            'grp_message_text': 'Hi all',
-        })
-        assert packet.channel_name == '#general'
+        apply_decryption_to_packet(
+            packet,
+            {
+                "channel_name": "#general",
+                "grp_timestamp": 1_234_567_890,
+                "grp_txt_type": 0,
+                "grp_txt_type_name": "PLAIN",
+                "grp_sender_name": "Bob",
+                "grp_message_text": "Hi all",
+            },
+        )
+        assert packet.channel_name == "#general"
         assert packet.grp_timestamp == 1_234_567_890
-        assert packet.grp_sender_name == 'Bob'
-        assert packet.grp_message_text == 'Hi all'
+        assert packet.grp_sender_name == "Bob"
+        assert packet.grp_message_text == "Hi all"
 
     def test_path_fields_mapped(self) -> None:
         packet = DecodedPacket()
-        apply_decryption_to_packet(packet, {
-            'path_return_len': 2,
-            'path_return_hops': ['0xaa', '0xbb'],
-            'path_extra_type': 0x03,
-            'path_extra_type_name': 'ACK',
-            'path_extra_ack_crc': '0x12345678',
-        })
+        apply_decryption_to_packet(
+            packet,
+            {
+                "path_return_len": 2,
+                "path_return_hops": ["0xaa", "0xbb"],
+                "path_extra_type": 0x03,
+                "path_extra_type_name": "ACK",
+                "path_extra_ack_crc": "0x12345678",
+            },
+        )
         assert packet.path_return_len == 2
-        assert packet.path_return_hops == ['0xaa', '0xbb']
-        assert packet.path_extra_type_name == 'ACK'
-        assert packet.path_extra_ack_crc == '0x12345678'
+        assert packet.path_return_hops == ["0xaa", "0xbb"]
+        assert packet.path_extra_type_name == "ACK"
+        assert packet.path_extra_ack_crc == "0x12345678"
 
     def test_empty_dict_leaves_fields_none(self) -> None:
         """Empty result dict should not modify any packet fields."""

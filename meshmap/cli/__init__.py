@@ -26,51 +26,43 @@ def _load_sniff_keys(keyfiles: tuple) -> list[dict[str, str]]:
         except Exception as exc:
             raise click.BadParameter(f"Cannot read key file {keyfile}: {exc}") from exc
 
-        if len(key_hex) != 128 or not all(c in '0123456789abcdefABCDEF' for c in key_hex):
+        if len(key_hex) != 128 or not all(c in "0123456789abcdefABCDEF" for c in key_hex):
             raise click.BadParameter(
                 f"{keyfile}: expected 128 hex characters (64-byte Ed25519 key), "
                 f"got {len(key_hex)} characters"
             )
-        private_keys.append({'hex': key_hex, 'file': str(keyfile)})
+        private_keys.append({"hex": key_hex, "file": str(keyfile)})
     return private_keys
 
 
 @click.group(invoke_without_command=True)
 @click.option(
-    '--serial-port', '-p',
+    "--serial-port",
+    "-p",
     required=True,
     type=str,
-    help='Serial port to connect to (e.g., /dev/ttyUSB0 or COM3)'
+    help="Serial port to connect to (e.g., /dev/ttyUSB0 or COM3)",
 )
 @click.option(
-    '--debug/--no-debug', '-d',
-    default=False,
-    help='Enable low-level debug logging from meshcore'
+    "--debug/--no-debug", "-d", default=False, help="Enable low-level debug logging from meshcore"
 )
 @click.option(
-    '--verbose/--no-verbose', '-v',
-    default=False,
-    help='Print progress messages to stderr'
+    "--verbose/--no-verbose", "-v", default=False, help="Print progress messages to stderr"
 )
+@click.option("--baudrate", "-b", default=115200, type=int, help="Serial port baud rate")
 @click.option(
-    '--baudrate', '-b',
-    default=115200,
-    type=int,
-    help='Serial port baud rate'
-)
-@click.option(
-    '--sniff',
-    'sniff_active',
+    "--sniff",
+    "sniff_active",
     is_flag=True,
     default=False,
-    help='Print RF packets in real-time while the command runs.'
+    help="Print RF packets in real-time while the command runs.",
 )
 @click.option(
-    '--sniff-key',
-    'sniff_keyfiles',
+    "--sniff-key",
+    "sniff_keyfiles",
     multiple=True,
     type=click.Path(exists=True, path_type=Path),
-    help='Private key file for packet decryption (can be repeated).'
+    help="Private key file for packet decryption (can be repeated).",
 )
 @click.pass_context
 def cli(
@@ -87,30 +79,35 @@ def cli(
     By default, scans for 0-hop nodes. Use subcommands for other operations.
     """
     ctx.ensure_object(dict)
-    ctx.obj['serial_port'] = serial_port
-    ctx.obj['debug'] = debug
-    ctx.obj['verbose'] = verbose
-    ctx.obj['baudrate'] = baudrate
-    ctx.obj['sniff_active'] = sniff_active
-    ctx.obj['sniff_keys'] = _load_sniff_keys(sniff_keyfiles) if sniff_keyfiles else []
+    ctx.obj["serial_port"] = serial_port
+    ctx.obj["debug"] = debug
+    ctx.obj["verbose"] = verbose
+    ctx.obj["baudrate"] = baudrate
+    ctx.obj["sniff_active"] = sniff_active
+    ctx.obj["sniff_keys"] = _load_sniff_keys(sniff_keyfiles) if sniff_keyfiles else []
 
     if ctx.invoked_subcommand is None:
-        asyncio.run(scan_zero_hop(
-            serial_port, debug, baudrate, verbose=False,
-            sniff_active=sniff_active,
-            sniff_keys=ctx.obj['sniff_keys'],
-        ))
+        asyncio.run(
+            scan_zero_hop(
+                serial_port,
+                debug,
+                baudrate,
+                verbose=False,
+                sniff_active=sniff_active,
+                sniff_keys=ctx.obj["sniff_keys"],
+            )
+        )
 
 
 cli.add_command(scan)
-cli.add_command(all_contacts, name='contacts')
-cli.add_command(discover_repeaters, name='discover-repeaters')
+cli.add_command(all_contacts, name="contacts")
+cli.add_command(discover_repeaters, name="discover-repeaters")
 cli.add_command(explore)
-cli.add_command(get_neighbours_cmd, name='get-neighbours')
-cli.add_command(guest_login, name='guest-login')
-cli.add_command(rf_discovery, name='rf-discover')
+cli.add_command(get_neighbours_cmd, name="get-neighbours")
+cli.add_command(guest_login, name="guest-login")
+cli.add_command(rf_discovery, name="rf-discover")
 cli.add_command(sniff)
-cli.add_command(export_key, name='export-key')
+cli.add_command(export_key, name="export-key")
 
 
 def main() -> int:
@@ -122,6 +119,7 @@ def main() -> int:
         return e.code if isinstance(e.code, int) else 0
     except Exception:
         import traceback
+
         traceback.print_exc()
         return 1
 

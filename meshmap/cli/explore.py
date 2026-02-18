@@ -20,7 +20,8 @@ from meshmap.scanner import MeshScanner
 @click.command()
 @click.pass_context
 @click.option(
-    "--output", "-o",
+    "--output",
+    "-o",
     default="meshmap-graph.json",
     type=click.Path(),
     show_default=True,
@@ -61,7 +62,8 @@ from meshmap.scanner import MeshScanner
     help="Maximum hop depth to explore.",
 )
 @click.option(
-    "--wait-time", "-w",
+    "--wait-time",
+    "-w",
     default=10.0,
     show_default=True,
     type=float,
@@ -86,22 +88,24 @@ def explore(
     The graph is saved to OUTPUT after each node is processed so
     exploration can be paused (Ctrl+C) and resumed with --resume.
     """
-    asyncio.run(_explore(
-        ctx.obj["serial_port"],
-        ctx.obj["baudrate"],
-        ctx.obj["debug"],
-        ctx.obj.get("verbose", False),
-        Path(output),
-        resume,
-        refresh,
-        retry,
-        serve,
-        port,
-        depth,
-        wait_time,
-        ctx.obj.get("sniff_active", False),
-        ctx.obj.get("sniff_keys", []),
-    ))
+    asyncio.run(
+        _explore(
+            ctx.obj["serial_port"],
+            ctx.obj["baudrate"],
+            ctx.obj["debug"],
+            ctx.obj.get("verbose", False),
+            Path(output),
+            resume,
+            refresh,
+            retry,
+            serve,
+            port,
+            depth,
+            wait_time,
+            ctx.obj.get("sniff_active", False),
+            ctx.obj.get("sniff_keys", []),
+        )
+    )
 
 
 async def _explore(
@@ -136,6 +140,7 @@ async def _explore(
     # ── Web server ───────────────────────────────────────────────────────────
     if serve:
         from meshmap.web.server import start_server
+
         start_server(port, graph.to_d3_json, lambda: graph.stats)
         console.print(f"[green]Visualization at http://localhost:{port}[/green]")
 
@@ -153,6 +158,7 @@ async def _explore(
     sniffer = None
     if sniff_active:
         from meshmap.sniffer import PacketSniffer
+
         sniffer = PacketSniffer(mesh, debug=debug)
         await sniffer.attach(sniff_keys or [], None)
 
@@ -223,8 +229,10 @@ async def _explore(
                     # Resolve to full pubkey when possible
                     nb_pk, nb_contact = _resolve_pubkey_and_contact(nb_prefix, mesh.contacts)
                     nb_type = (
-                        "repeater" if (nb_contact and nb_contact.get("type") == 2)
-                        else "node" if nb_contact
+                        "repeater"
+                        if (nb_contact and nb_contact.get("type") == 2)
+                        else "node"
+                        if nb_contact
                         else "unknown"
                     )
 
@@ -276,6 +284,7 @@ async def _explore(
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
+
 
 def _resolve_pubkey(pubkey: str, contacts: dict[str, Any]) -> str:
     """Return the full pubkey from contacts if the given pubkey is a prefix; else return as-is."""
@@ -332,12 +341,8 @@ async def _login_fetch_logout(
                 await asyncio.sleep(2)
             continue
 
-        t_ok = asyncio.create_task(
-            mesh.wait_for_event(EventType.LOGIN_SUCCESS, timeout=10)
-        )
-        t_fail = asyncio.create_task(
-            mesh.wait_for_event(EventType.LOGIN_FAILED, timeout=10)
-        )
+        t_ok = asyncio.create_task(mesh.wait_for_event(EventType.LOGIN_SUCCESS, timeout=10))
+        t_fail = asyncio.create_task(mesh.wait_for_event(EventType.LOGIN_FAILED, timeout=10))
         done, pending_tasks = await asyncio.wait(
             {t_ok, t_fail}, return_when=asyncio.FIRST_COMPLETED
         )
@@ -359,9 +364,7 @@ async def _login_fetch_logout(
     result = None
     try:
         for attempt in range(1, _fetch_attempts + 1):
-            result = await mesh.commands.fetch_all_neighbours(
-                contact, timeout=30, min_timeout=15
-            )
+            result = await mesh.commands.fetch_all_neighbours(contact, timeout=30, min_timeout=15)
             if result is not None:
                 break
             if attempt < _fetch_attempts:

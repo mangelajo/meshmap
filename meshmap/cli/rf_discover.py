@@ -10,16 +10,13 @@ from meshmap.scanner import MeshScanner
 
 
 @click.command()
-@click.argument('duration', type=int)
+@click.argument("duration", type=int)
 @click.pass_context
 def rf_discovery(ctx, duration: int):
     """Discover nearby nodes by listening to RF activity for DURATION seconds."""
-    asyncio.run(do_rf_discovery(
-        ctx.obj['serial_port'],
-        ctx.obj['debug'],
-        ctx.obj['baudrate'],
-        duration
-    ))
+    asyncio.run(
+        do_rf_discovery(ctx.obj["serial_port"], ctx.obj["debug"], ctx.obj["baudrate"], duration)
+    )
 
 
 async def do_rf_discovery(serial_port: str, debug: bool, baudrate: int, duration: int) -> None:

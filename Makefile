@@ -16,12 +16,14 @@ test: ## Run tests with coverage
 	uv run pytest
 
 lint: ## Run linting checks
-	uv run ruff check --fix .
+	uv run ruff check
 	uv run mypy meshmap
+
+lint-fix: ## Run linting fixes
+	uv run ruff check --fix .
 
 format: ## Format code with ruff
 	uv run ruff format .
-	uv run ruff check --fix .
 
 clean: ## Clean up generated files
 	rm -rf build/

@@ -31,13 +31,7 @@ PAYLOAD_TYPES = {
 }
 
 # ADVERT type definitions
-ADVERT_TYPES = {
-    0: "NONE",
-    1: "CHAT",
-    2: "REPEATER",
-    3: "ROOM",
-    4: "SENSOR"
-}
+ADVERT_TYPES = {0: "NONE", 1: "CHAT", 2: "REPEATER", 3: "ROOM", 4: "SENSOR"}
 
 
 def format_hexdump(data: bytes) -> str:
@@ -51,21 +45,21 @@ def format_hexdump(data: bytes) -> str:
     """
     lines = []
     for i in range(0, len(data), 16):
-        chunk = data[i:i+16]
+        chunk = data[i : i + 16]
 
         # Offset (4 hex digits, 16-bit)
         offset = f"{i:04x}"
 
         # Hex representation (two groups of 8 bytes)
-        hex_part1 = ' '.join(f"{b:02x}" for b in chunk[:8])
-        hex_part2 = ' '.join(f"{b:02x}" for b in chunk[8:16]) if len(chunk) > 8 else ''
+        hex_part1 = " ".join(f"{b:02x}" for b in chunk[:8])
+        hex_part2 = " ".join(f"{b:02x}" for b in chunk[8:16]) if len(chunk) > 8 else ""
 
         # Pad hex parts if needed
         hex_part1 = hex_part1.ljust(23)  # 8 bytes = "xx xx xx xx xx xx xx xx" = 23 chars
         hex_part2 = hex_part2.ljust(23)
 
         # ASCII representation
-        ascii_part = ''.join(chr(b) if 32 <= b < 127 else '.' for b in chunk)
+        ascii_part = "".join(chr(b) if 32 <= b < 127 else "." for b in chunk)
 
         # Combine parts
         lines.append(f"{offset}  {hex_part1} {hex_part2} |{ascii_part}|")
@@ -73,7 +67,7 @@ def format_hexdump(data: bytes) -> str:
     # Add final offset line
     lines.append(f"{len(data):04x}")
 
-    return '\n'.join(lines)
+    return "\n".join(lines)
 
 
 def decode_packet(payload_hex: str, contact_map: dict[str, str]) -> DecodedPacket:
@@ -130,7 +124,7 @@ def decode_packet(payload_hex: str, contact_map: dict[str, str]) -> DecodedPacke
 
         if has_transport_codes and len(data) > offset + 4:
             # Read 4 transport code bytes
-            transport_codes = data[offset:offset+4]
+            transport_codes = data[offset : offset + 4]
             packet.transport_codes = [f"0x{b:02x}" for b in transport_codes]
             offset += 4
 
@@ -142,7 +136,7 @@ def decode_packet(payload_hex: str, contact_map: dict[str, str]) -> DecodedPacke
 
             # Read path data (hop addresses)
             if path_len > 0 and len(data) >= offset + path_len:
-                path_data = data[offset:offset+path_len]
+                path_data = data[offset : offset + path_len]
                 offset += path_len
 
                 # Match each hop to contacts
@@ -172,6 +166,7 @@ def decode_packet(payload_hex: str, contact_map: dict[str, str]) -> DecodedPacke
     except Exception as e:
         packet.decode_error = str(e)
         import traceback
+
         packet.decode_traceback = traceback.format_exc()
 
     return packet
@@ -198,7 +193,9 @@ def _decode_multipart(packet: DecodedPacket, payload_data: bytes) -> None:
             packet.multipart_payload_hex = wrapped_payload.hex()
 
 
-def _decode_control(packet: DecodedPacket, payload_data: bytes, contact_map: dict[str, str]) -> None:
+def _decode_control(
+    packet: DecodedPacket, payload_data: bytes, contact_map: dict[str, str]
+) -> None:
     """Decode CONTROL payload structure.
 
     Format: [control_type:1][control_data:variable]
@@ -221,7 +218,7 @@ def _decode_control(packet: DecodedPacket, payload_data: bytes, contact_map: dic
             if sub_type == 0x8 and len(control_data) >= 5:
                 # Format: [type_filter:1][tag:4][since:4 (optional)]
                 type_filter = control_data[0]
-                tag = struct.unpack('<I', control_data[1:5])[0]
+                tag = struct.unpack("<I", control_data[1:5])[0]
 
                 packet.control_subtype = "DISCOVER_REQ"
                 packet.discover_type_filter = f"0x{type_filter:02x}"
@@ -241,9 +238,10 @@ def _decode_control(packet: DecodedPacket, payload_data: bytes, contact_map: dic
 
                 # Check for optional 'since' timestamp
                 if len(control_data) >= 9:
-                    since = struct.unpack('<I', control_data[5:9])[0]
+                    since = struct.unpack("<I", control_data[5:9])[0]
                     if since > 0:
                         from datetime import datetime
+
                         packet.discover_since = since
                         packet.discover_since_datetime = datetime.fromtimestamp(since).isoformat()
 
@@ -259,7 +257,7 @@ def _decode_control(packet: DecodedPacket, payload_data: bytes, contact_map: dic
                 snr_signed = snr_byte if snr_byte < 128 else snr_byte - 256
                 snr_float = snr_signed / 4.0
 
-                tag = struct.unpack('<I', control_data[1:5])[0]
+                tag = struct.unpack("<I", control_data[1:5])[0]
 
                 packet.control_subtype = "DISCOVER_RESP"
                 packet.discover_node_type = node_type_names.get(node_type, f"UNKNOWN_{node_type}")
@@ -286,10 +284,7 @@ def _decode_control(packet: DecodedPacket, payload_data: bytes, contact_map: dic
 
 
 def _decode_payload(
-    packet: DecodedPacket,
-    payload_type: int,
-    payload_data: bytes,
-    contact_map: dict[str, str]
+    packet: DecodedPacket, payload_type: int, payload_data: bytes, contact_map: dict[str, str]
 ) -> None:
     """Decode payload data based on type."""
     if payload_type == 0x0A:  # MULTIPART
@@ -301,17 +296,17 @@ def _decode_payload(
     elif payload_type == 0x03:  # ACK
         # Format: [ack_crc:4]
         if len(payload_data) >= 4:
-            ack_crc = struct.unpack('<I', payload_data[:4])[0]
+            ack_crc = struct.unpack("<I", payload_data[:4])[0]
             packet.ack_crc = f"0x{ack_crc:08x}"
 
     elif payload_type == 0x09:  # TRACE
         # Format: [trace_tag:4][auth_code:4][flags:1][path_data:variable]
         if len(payload_data) >= 4:
-            trace_tag = struct.unpack('<I', payload_data[:4])[0]
+            trace_tag = struct.unpack("<I", payload_data[:4])[0]
             packet.trace_tag = f"0x{trace_tag:08x}"
 
             if len(payload_data) >= 8:
-                auth_code = struct.unpack('<I', payload_data[4:8])[0]
+                auth_code = struct.unpack("<I", payload_data[4:8])[0]
                 packet.trace_auth = f"0x{auth_code:08x}"
 
             if len(payload_data) >= 9:
@@ -423,11 +418,7 @@ def _decode_payload(
                     packet.encrypted_len = len(encrypted_data)
 
 
-def _decode_advert(
-    packet: DecodedPacket,
-    payload_data: bytes,
-    contact_map: dict[str, str]
-) -> None:
+def _decode_advert(packet: DecodedPacket, payload_data: bytes, contact_map: dict[str, str]) -> None:
     """Decode ADVERT payload structure."""
     # Format: [pubkey:32][timestamp:4][signature:64][app_data:up to 32]
     if len(payload_data) >= 32:
@@ -440,7 +431,7 @@ def _decode_advert(
         if len(payload_data) >= 36:
             # Extract timestamp
             timestamp_bytes = payload_data[32:36]
-            timestamp = int.from_bytes(timestamp_bytes, 'little')
+            timestamp = int.from_bytes(timestamp_bytes, "little")
             packet.advert_timestamp = timestamp
 
         if len(payload_data) >= 100:
@@ -466,37 +457,35 @@ def _decode_advert(
 
                 # Lat/Lon (if present)
                 if flags & 0x10 and len(app_data) >= offset + 8:
-                    lat_bytes = app_data[offset:offset+4]
-                    lon_bytes = app_data[offset+4:offset+8]
-                    lat_int = struct.unpack('<i', lat_bytes)[0]
-                    lon_int = struct.unpack('<i', lon_bytes)[0]
+                    lat_bytes = app_data[offset : offset + 4]
+                    lon_bytes = app_data[offset + 4 : offset + 8]
+                    lat_int = struct.unpack("<i", lat_bytes)[0]
+                    lon_int = struct.unpack("<i", lon_bytes)[0]
                     packet.advert_lat = lat_int / 1_000_000.0
                     packet.advert_lon = lon_int / 1_000_000.0
                     offset += 8
 
                 # Extra1 (future use, if present)
                 if flags & 0x20 and len(app_data) >= offset + 2:
-                    extra1 = struct.unpack('<H', app_data[offset:offset+2])[0]
+                    extra1 = struct.unpack("<H", app_data[offset : offset + 2])[0]
                     packet.advert_extra1 = extra1
                     offset += 2
 
                 # Extra2 (future use, if present)
                 if flags & 0x40 and len(app_data) >= offset + 2:
-                    extra2 = struct.unpack('<H', app_data[offset:offset+2])[0]
+                    extra2 = struct.unpack("<H", app_data[offset : offset + 2])[0]
                     packet.advert_extra2 = extra2
                     offset += 2
 
                 # Name (if present, remainder of app_data)
                 if flags & 0x80 and len(app_data) > offset:
                     name_bytes = app_data[offset:]
-                    name_str = name_bytes.decode('utf-8', errors='replace')
-                    packet.advert_name = name_str.rstrip('\x00')
+                    name_str = name_bytes.decode("utf-8", errors="replace")
+                    packet.advert_name = name_str.rstrip("\x00")
 
 
 def apply_decryption_to_packet(
-    packet: DecodedPacket,
-    decryption_result: dict[str, Any],
-    key_file: str | None = None
+    packet: DecodedPacket, decryption_result: dict[str, Any], key_file: str | None = None
 ) -> None:
     """Map a decryption result dict into the corresponding DecodedPacket fields.
 
@@ -513,89 +502,89 @@ def apply_decryption_to_packet(
         packet.decrypted_by = key_file
 
     # Common fields present in all decrypted results
-    if 'contact_name' in decryption_result:
-        packet.src_name = decryption_result['contact_name']
-    if 'datetime' in decryption_result:
-        packet.decrypted_datetime = decryption_result['datetime']
-    if 'plaintext_hex' in decryption_result:
-        packet.decrypted_plaintext_hex = decryption_result['plaintext_hex']
+    if "contact_name" in decryption_result:
+        packet.src_name = decryption_result["contact_name"]
+    if "datetime" in decryption_result:
+        packet.decrypted_datetime = decryption_result["datetime"]
+    if "plaintext_hex" in decryption_result:
+        packet.decrypted_plaintext_hex = decryption_result["plaintext_hex"]
 
     # TXT_MSG fields
-    if 'timestamp' in decryption_result and 'txt_type' in decryption_result:
+    if "timestamp" in decryption_result and "txt_type" in decryption_result:
         # 'timestamp' key is used for TXT_MSG (and GRP_TXT via legacy alias)
-        packet.txt_timestamp = decryption_result['timestamp']
-    if 'txt_type' in decryption_result:
-        packet.txt_type = decryption_result['txt_type']
-    if 'txt_type_name' in decryption_result:
-        packet.txt_type_name = decryption_result['txt_type_name']
-    if 'txt_attempt' in decryption_result:
-        packet.txt_attempt = decryption_result['txt_attempt']
-    if 'txt_signed_sender_prefix' in decryption_result:
-        packet.txt_signed_sender_prefix = decryption_result['txt_signed_sender_prefix']
-    if 'txt_plaintext_message' in decryption_result:
-        packet.txt_plaintext_message = decryption_result['txt_plaintext_message']
-    elif 'plaintext' in decryption_result and packet.txt_plaintext_message is None:
+        packet.txt_timestamp = decryption_result["timestamp"]
+    if "txt_type" in decryption_result:
+        packet.txt_type = decryption_result["txt_type"]
+    if "txt_type_name" in decryption_result:
+        packet.txt_type_name = decryption_result["txt_type_name"]
+    if "txt_attempt" in decryption_result:
+        packet.txt_attempt = decryption_result["txt_attempt"]
+    if "txt_signed_sender_prefix" in decryption_result:
+        packet.txt_signed_sender_prefix = decryption_result["txt_signed_sender_prefix"]
+    if "txt_plaintext_message" in decryption_result:
+        packet.txt_plaintext_message = decryption_result["txt_plaintext_message"]
+    elif "plaintext" in decryption_result and packet.txt_plaintext_message is None:
         # Legacy fallback: bare 'plaintext' key
-        packet.txt_plaintext_message = decryption_result['plaintext']
+        packet.txt_plaintext_message = decryption_result["plaintext"]
 
     # REQ fields
-    if 'req_timestamp' in decryption_result:
-        packet.req_timestamp = decryption_result['req_timestamp']
-    if 'req_type' in decryption_result:
-        packet.req_type = decryption_result['req_type']
-    if 'req_type_name' in decryption_result:
-        packet.req_type_name = decryption_result['req_type_name']
-    if 'req_data_hex' in decryption_result:
-        packet.req_data_hex = decryption_result['req_data_hex']
+    if "req_timestamp" in decryption_result:
+        packet.req_timestamp = decryption_result["req_timestamp"]
+    if "req_type" in decryption_result:
+        packet.req_type = decryption_result["req_type"]
+    if "req_type_name" in decryption_result:
+        packet.req_type_name = decryption_result["req_type_name"]
+    if "req_data_hex" in decryption_result:
+        packet.req_data_hex = decryption_result["req_data_hex"]
 
     # RESPONSE fields
-    if 'resp_timestamp' in decryption_result:
-        packet.resp_timestamp = decryption_result['resp_timestamp']
-    if 'resp_data_hex' in decryption_result:
-        packet.resp_data_hex = decryption_result['resp_data_hex']
-    if 'resp_neighbours_total_count' in decryption_result:
-        packet.resp_neighbours_total_count = decryption_result['resp_neighbours_total_count']
-    if 'resp_neighbours_results_count' in decryption_result:
-        packet.resp_neighbours_results_count = decryption_result['resp_neighbours_results_count']
-    if 'resp_neighbours_list' in decryption_result:
-        packet.resp_neighbours_list = decryption_result['resp_neighbours_list']
+    if "resp_timestamp" in decryption_result:
+        packet.resp_timestamp = decryption_result["resp_timestamp"]
+    if "resp_data_hex" in decryption_result:
+        packet.resp_data_hex = decryption_result["resp_data_hex"]
+    if "resp_neighbours_total_count" in decryption_result:
+        packet.resp_neighbours_total_count = decryption_result["resp_neighbours_total_count"]
+    if "resp_neighbours_results_count" in decryption_result:
+        packet.resp_neighbours_results_count = decryption_result["resp_neighbours_results_count"]
+    if "resp_neighbours_list" in decryption_result:
+        packet.resp_neighbours_list = decryption_result["resp_neighbours_list"]
 
     # PATH fields
-    if 'path_return_len' in decryption_result:
-        packet.path_return_len = decryption_result['path_return_len']
-    if 'path_return_hops' in decryption_result:
-        packet.path_return_hops = decryption_result['path_return_hops']
-    if 'path_extra_type' in decryption_result:
-        packet.path_extra_type = decryption_result['path_extra_type']
-    if 'path_extra_type_name' in decryption_result:
-        packet.path_extra_type_name = decryption_result['path_extra_type_name']
-    if 'path_extra_payload_hex' in decryption_result:
-        packet.path_extra_payload_hex = decryption_result['path_extra_payload_hex']
-    if 'path_extra_ack_crc' in decryption_result:
-        packet.path_extra_ack_crc = decryption_result['path_extra_ack_crc']
+    if "path_return_len" in decryption_result:
+        packet.path_return_len = decryption_result["path_return_len"]
+    if "path_return_hops" in decryption_result:
+        packet.path_return_hops = decryption_result["path_return_hops"]
+    if "path_extra_type" in decryption_result:
+        packet.path_extra_type = decryption_result["path_extra_type"]
+    if "path_extra_type_name" in decryption_result:
+        packet.path_extra_type_name = decryption_result["path_extra_type_name"]
+    if "path_extra_payload_hex" in decryption_result:
+        packet.path_extra_payload_hex = decryption_result["path_extra_payload_hex"]
+    if "path_extra_ack_crc" in decryption_result:
+        packet.path_extra_ack_crc = decryption_result["path_extra_ack_crc"]
 
     # ANON_REQ fields
-    if 'anon_req_timestamp' in decryption_result:
-        packet.anon_req_timestamp = decryption_result['anon_req_timestamp']
-    if 'anon_req_tag' in decryption_result:
-        packet.anon_req_tag = decryption_result['anon_req_tag']
-    if 'anon_room_sync_since' in decryption_result:
-        packet.anon_room_sync_since = decryption_result['anon_room_sync_since']
-    if 'anon_password' in decryption_result:
-        packet.anon_password = decryption_result['anon_password']
-    if 'anon_req_data_hex' in decryption_result:
-        packet.anon_req_data_hex = decryption_result['anon_req_data_hex']
+    if "anon_req_timestamp" in decryption_result:
+        packet.anon_req_timestamp = decryption_result["anon_req_timestamp"]
+    if "anon_req_tag" in decryption_result:
+        packet.anon_req_tag = decryption_result["anon_req_tag"]
+    if "anon_room_sync_since" in decryption_result:
+        packet.anon_room_sync_since = decryption_result["anon_room_sync_since"]
+    if "anon_password" in decryption_result:
+        packet.anon_password = decryption_result["anon_password"]
+    if "anon_req_data_hex" in decryption_result:
+        packet.anon_req_data_hex = decryption_result["anon_req_data_hex"]
 
     # GRP_TXT / GRP_DATA fields
-    if 'channel_name' in decryption_result:
-        packet.channel_name = decryption_result['channel_name']
-    if 'grp_timestamp' in decryption_result:
-        packet.grp_timestamp = decryption_result['grp_timestamp']
-    if 'grp_txt_type' in decryption_result:
-        packet.grp_txt_type = decryption_result['grp_txt_type']
-    if 'grp_txt_type_name' in decryption_result:
-        packet.grp_txt_type_name = decryption_result['grp_txt_type_name']
-    if 'grp_sender_name' in decryption_result:
-        packet.grp_sender_name = decryption_result['grp_sender_name']
-    if 'grp_message_text' in decryption_result:
-        packet.grp_message_text = decryption_result['grp_message_text']
+    if "channel_name" in decryption_result:
+        packet.channel_name = decryption_result["channel_name"]
+    if "grp_timestamp" in decryption_result:
+        packet.grp_timestamp = decryption_result["grp_timestamp"]
+    if "grp_txt_type" in decryption_result:
+        packet.grp_txt_type = decryption_result["grp_txt_type"]
+    if "grp_txt_type_name" in decryption_result:
+        packet.grp_txt_type_name = decryption_result["grp_txt_type_name"]
+    if "grp_sender_name" in decryption_result:
+        packet.grp_sender_name = decryption_result["grp_sender_name"]
+    if "grp_message_text" in decryption_result:
+        packet.grp_message_text = decryption_result["grp_message_text"]

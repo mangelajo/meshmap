@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 # SNR display thresholds (dB)
-SNR_GREEN = 2    # >= green (good signal)
+SNR_GREEN = 2  # >= green (good signal)
 SNR_YELLOW = -7  # >= yellow (marginal), < red (poor signal)
 
 
@@ -20,6 +20,7 @@ def snr_color(snr: float) -> str:
 @dataclass
 class HopInfo:
     """Information about a single hop in a packet path."""
+
     hash: str
     contacts: list[str] = field(default_factory=list)
 
@@ -27,6 +28,7 @@ class HopInfo:
 @dataclass
 class SignalInfo:
     """RF signal information."""
+
     rssi: int
     snr: int
     timestamp: str
@@ -35,6 +37,7 @@ class SignalInfo:
 @dataclass
 class AdvertData:
     """Parsed ADVERT app_data structure."""
+
     type: str
     name: str | None = None
     lat: float | None = None
@@ -46,6 +49,7 @@ class AdvertData:
 @dataclass
 class DecryptionResult:
     """Result of packet decryption attempt."""
+
     success: bool
     error: str | None = None
     contact_name: str | None = None
@@ -61,6 +65,7 @@ class DecryptionResult:
 @dataclass
 class DecodedPacket:
     """Decoded meshcore packet structure."""
+
     # Header information
     header_hex: str | None = None
     route_type: str | None = None

@@ -17,22 +17,25 @@ from meshmap.scanner import MeshScanner
 @click.command()
 @click.pass_context
 @click.option(
-    '--output', '-o',
-    type=click.Choice(['table', 'json', 'yaml'], case_sensitive=False),
-    default='table',
+    "--output",
+    "-o",
+    type=click.Choice(["table", "json", "yaml"], case_sensitive=False),
+    default="table",
     show_default=True,
-    help='Output format.'
+    help="Output format.",
 )
 def all_contacts(ctx, output: str):
     """Show all contacts (including unknown paths)."""
-    asyncio.run(show_all_contacts(
-        ctx.obj['serial_port'],
-        ctx.obj['debug'],
-        ctx.obj['baudrate'],
-        output,
-        ctx.obj.get('sniff_active', False),
-        ctx.obj.get('sniff_keys', []),
-    ))
+    asyncio.run(
+        show_all_contacts(
+            ctx.obj["serial_port"],
+            ctx.obj["debug"],
+            ctx.obj["baudrate"],
+            output,
+            ctx.obj.get("sniff_active", False),
+            ctx.obj.get("sniff_keys", []),
+        )
+    )
 
 
 async def show_all_contacts(
@@ -53,9 +56,9 @@ async def show_all_contacts(
 
         contacts = await scanner.get_all_contacts()
 
-        if output == 'json':
+        if output == "json":
             click.echo(json.dumps(contacts, indent=2, sort_keys=True))
-        elif output == 'yaml':
+        elif output == "yaml":
             click.echo(yaml.dump(contacts, allow_unicode=True, sort_keys=True), nl=False)
         else:
             _print_contacts_table(contacts)
@@ -89,19 +92,17 @@ def _print_contacts_table(contacts: dict[str, Any]) -> None:
     sorted_contacts = sorted(contacts.items(), key=_path_sort_key)
 
     for pubkey, contact in sorted_contacts:
-        name = contact.get('adv_name') or ''
-        ctype = contact.get('type', 0)
-        type_label = {1: 'contact', 2: 'repeater', 3: 'chatroom'}.get(ctype, str(ctype))
-        path_len = contact.get('out_path_len')
-        path_str = 'flood' if path_len == -1 else (str(path_len) if path_len is not None else '')
-        lat = contact.get('adv_lat')
-        lon = contact.get('adv_lon')
-        lat_str = f"{lat:.5f}" if lat is not None else ''
-        lon_str = f"{lon:.5f}" if lon is not None else ''
-        ts = contact.get('last_advert')
-        last_advert = (
-            datetime.fromtimestamp(ts, tz=UTC).strftime('%Y-%m-%d %H:%M:%S') if ts else ''
-        )
+        name = contact.get("adv_name") or ""
+        ctype = contact.get("type", 0)
+        type_label = {1: "contact", 2: "repeater", 3: "chatroom"}.get(ctype, str(ctype))
+        path_len = contact.get("out_path_len")
+        path_str = "flood" if path_len == -1 else (str(path_len) if path_len is not None else "")
+        lat = contact.get("adv_lat")
+        lon = contact.get("adv_lon")
+        lat_str = f"{lat:.5f}" if lat is not None else ""
+        lon_str = f"{lon:.5f}" if lon is not None else ""
+        ts = contact.get("last_advert")
+        last_advert = datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%d %H:%M:%S") if ts else ""
 
         table.add_row(
             name,

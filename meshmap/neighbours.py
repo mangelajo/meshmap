@@ -42,9 +42,7 @@ async def get_neighbours(
             click.echo(msg, err=True)
 
     _log(f"Connecting to {serial_port}...")
-    mesh = await meshcore.MeshCore.create_serial(
-        port=serial_port, baudrate=baudrate, debug=debug
-    )
+    mesh = await meshcore.MeshCore.create_serial(port=serial_port, baudrate=baudrate, debug=debug)
     _log("Connected.")
 
     sniffer = None
@@ -83,15 +81,9 @@ async def get_neighbours(
                     await asyncio.sleep(2)
                 continue
             _log("  Waiting for LOGIN_SUCCESS / LOGIN_FAILED (10 s)...")
-            t_ok = asyncio.create_task(
-                mesh.wait_for_event(EventType.LOGIN_SUCCESS, timeout=10)
-            )
-            t_fail = asyncio.create_task(
-                mesh.wait_for_event(EventType.LOGIN_FAILED, timeout=10)
-            )
-            done, pending = await asyncio.wait(
-                {t_ok, t_fail}, return_when=asyncio.FIRST_COMPLETED
-            )
+            t_ok = asyncio.create_task(mesh.wait_for_event(EventType.LOGIN_SUCCESS, timeout=10))
+            t_fail = asyncio.create_task(mesh.wait_for_event(EventType.LOGIN_FAILED, timeout=10))
+            done, pending = await asyncio.wait({t_ok, t_fail}, return_when=asyncio.FIRST_COMPLETED)
             for t in pending:
                 t.cancel()
 
@@ -114,7 +106,9 @@ async def get_neighbours(
         result = None
         try:
             for attempt in range(1, _fetch_attempts + 1):
-                _log(f"Fetching neighbours (attempt {attempt}/{_fetch_attempts}, timeout=30 s, min=15 s)...")
+                _log(
+                    f"Fetching neighbours (attempt {attempt}/{_fetch_attempts}, timeout=30 s, min=15 s)..."
+                )
                 result = await mesh.commands.fetch_all_neighbours(
                     contact, timeout=30, min_timeout=15
                 )
@@ -182,9 +176,5 @@ def _find_contact(contacts: dict[str, Any], query: str) -> dict[str, Any]:
             f"Wait for it to advertise, or run 'rf-discover' to request advertisements from nearby nodes."
         )
 
-    available = ", ".join(
-        f"{c.get('adv_name')} ({pk[:12]}…)" for pk, c in contacts.items()
-    )
-    raise ValueError(
-        f"Contact '{query}' not found. Available contacts: {available}"
-    )
+    available = ", ".join(f"{c.get('adv_name')} ({pk[:12]}…)" for pk, c in contacts.items())
+    raise ValueError(f"Contact '{query}' not found. Available contacts: {available}")

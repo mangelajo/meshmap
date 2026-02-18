@@ -19,20 +19,20 @@ def _now() -> str:
 class GraphNode:
     public_key: str
     name: str | None
-    node_type: str       # "repeater" | "node" | "unknown"
+    node_type: str  # "repeater" | "node" | "unknown"
     lat: float | None
     lon: float | None
-    first_seen: str      # ISO timestamp when first discovered
-    last_seen: str       # ISO timestamp when last seen as a neighbour
-    last_visited: str | None = None   # ISO timestamp of last successful neighbour fetch
-    visit_failed: bool = False         # True if last login attempt failed
+    first_seen: str  # ISO timestamp when first discovered
+    last_seen: str  # ISO timestamp when last seen as a neighbour
+    last_visited: str | None = None  # ISO timestamp of last successful neighbour fetch
+    visit_failed: bool = False  # True if last login attempt failed
     depth: int = 0
 
 
 @dataclass
 class GraphEdge:
-    node_a: str                        # canonical min key
-    node_b: str                        # canonical max key
+    node_a: str  # canonical min key
+    node_b: str  # canonical max key
     last_seen: str
     snr_a_hears_b: float | None = None  # node_a received node_b's signal (b→a quality)
     snr_b_hears_a: float | None = None  # node_b received node_a's signal (a→b quality)
@@ -148,9 +148,9 @@ class MeshGraph:
             self._edges[key] = GraphEdge(node_a=key[0], node_b=key[1], last_seen=now)
         edge = self._edges[key]
         edge.last_seen = now
-        if listener == key[0]:   # listener is node_a → a heard b
+        if listener == key[0]:  # listener is node_a → a heard b
             edge.snr_a_hears_b = snr
-        else:                    # listener is node_b → b heard a
+        else:  # listener is node_b → b heard a
             edge.snr_b_hears_a = snr
         return edge
 
@@ -195,7 +195,8 @@ class MeshGraph:
     def stats(self) -> dict[str, int]:
         visited = sum(1 for n in self.nodes.values() if n.last_visited is not None)
         pending = sum(
-            1 for n in self.nodes.values()
+            1
+            for n in self.nodes.values()
             if n.node_type == "repeater" and n.last_visited is None and not n.visit_failed
         )
         failed = sum(1 for n in self.nodes.values() if n.visit_failed)

@@ -46,9 +46,7 @@ class TestSharedSecretComputation:
         private_key = bytes.fromhex(private_key_hex)
 
         # Synthetic contact public key (generated from seed bytes(range(33, 65)))
-        contact_pubkey_hex = (
-            "e7f162a10bec559afea195e4dce84b69568d5d2cb0963eb446c0685e2b17f2f0"
-        )
+        contact_pubkey_hex = "e7f162a10bec559afea195e4dce84b69568d5d2cb0963eb446c0685e2b17f2f0"
         contact_pubkey = bytes.fromhex(contact_pubkey_hex)
 
         # Compute shared secret
@@ -63,9 +61,7 @@ class TestSharedSecretComputation:
     def test_compute_shared_secret_uses_first_32_bytes(self):
         """Test that only the first 32 bytes (scalar) are used, not nonce seed."""
         # Create a key where the nonce seed is different
-        scalar = bytes.fromhex(
-            "79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664"
-        )
+        scalar = bytes.fromhex("79b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664")
         nonce_seed_1 = b"0" * 32
         nonce_seed_2 = b"1" * 32
 
@@ -105,13 +101,12 @@ class TestGroupMessageDecryption:
         )
 
         result = decrypt_group_message(
-            payload_hex=payload_hex,
-            channel_names=["#general", "#public"]
+            payload_hex=payload_hex, channel_names=["#general", "#public"]
         )
 
         assert result is not None
-        assert 'error' in result
-        assert 'Failed to decrypt' in result['error']
+        assert "error" in result
+        assert "Failed to decrypt" in result["error"]
 
 
 class TestPrivateMessageDecryption:
@@ -146,12 +141,12 @@ class TestPrivateMessageDecryption:
             payload_hex=payload_hex,
             private_key_hex=private_key_hex,
             contacts=contacts,
-            debug=False
+            debug=False,
         )
 
         # Verify result structure (will have error with test key)
         assert result is not None
-        assert 'error' in result or 'success' in result
+        assert "error" in result or "success" in result
 
     def test_decrypt_with_correct_key_parses_metadata(self):
         """Test that successful decryption parses timestamp and message type."""
@@ -179,13 +174,13 @@ class TestPrivateMessageDecryption:
             payload_hex=payload_hex,
             private_key_hex=private_key_hex,
             contacts=contacts,
-            debug=False
+            debug=False,
         )
 
         # Should fail because we're not the recipient
         assert result is not None
         # Will either have error or fail MAC verification
-        assert 'error' in result or result.get('success') is False
+        assert "error" in result or result.get("success") is False
 
 
 class TestEndToEndDecryption:
@@ -241,9 +236,7 @@ class TestEndToEndDecryption:
         private_key = bytes.fromhex(private_key_hex)
 
         # Expected public key derived from scalar via crypto_scalarmult_ed25519_base_noclamp
-        expected_pubkey = (
-            "24f7799f2cfa03541cf25ecf540c38aeb2058377f85dc1890554c21895e8824a"
-        )
+        expected_pubkey = "24f7799f2cfa03541cf25ecf540c38aeb2058377f85dc1890554c21895e8824a"
 
         # Derive public key from the scalar (first 32 bytes)
         scalar = private_key[:32]
@@ -262,10 +255,10 @@ class TestEdgeCases:
             payload_hex="",
             private_key_hex="00" * 64,
             contacts={},
-            debug=False
+            debug=False,
         )
         assert result is not None
-        assert 'error' in result
+        assert "error" in result
 
     def test_invalid_private_key_length(self):
         """Test handling of invalid private key length."""
@@ -281,12 +274,12 @@ class TestEdgeCases:
                     "public_key": "ad" + "00" * 31,
                 }
             },
-            debug=False
+            debug=False,
         )
         # Should get an error (likely MAC failure or conversion error)
         assert result is not None
         # Will have error or fail due to wrong key
-        assert 'error' in result or not result.get('success', True)
+        assert "error" in result or not result.get("success", True)
 
     def test_malformed_payload(self):
         """Test handling of malformed packet payload."""
@@ -295,10 +288,10 @@ class TestEdgeCases:
             payload_hex="12",  # Too short
             private_key_hex="00" * 64,
             contacts={},
-            debug=False
+            debug=False,
         )
         assert result is not None
-        assert 'error' in result
+        assert "error" in result
 
     def test_unsupported_packet_type(self):
         """Test handling of unsupported packet types."""
@@ -307,11 +300,11 @@ class TestEdgeCases:
             payload_hex="1234567890",
             private_key_hex="00" * 64,
             contacts={},
-            debug=False
+            debug=False,
         )
         assert result is not None
-        assert 'error' in result
-        assert 'Unsupported' in result['error']
+        assert "error" in result
+        assert "Unsupported" in result["error"]
 
 
 class TestMessageFormatParsing:
@@ -331,16 +324,16 @@ class TestMessageFormatParsing:
 
         # This would be the plaintext after decryption
         plaintext = (
-            struct.pack('<I', expected_timestamp) +  # Timestamp (little-endian)
-            bytes([expected_type]) +                  # Message type
-            expected_message.encode('utf-8')          # Message text
+            struct.pack("<I", expected_timestamp)  # Timestamp (little-endian)
+            + bytes([expected_type])  # Message type
+            + expected_message.encode("utf-8")  # Message text
         )
 
         # Parse it the same way the code does
         if len(plaintext) >= 5:
-            timestamp = struct.unpack('<I', plaintext[:4])[0]
+            timestamp = struct.unpack("<I", plaintext[:4])[0]
             msg_type = plaintext[4]
-            message_text = plaintext[5:].decode('utf-8', errors='replace')
+            message_text = plaintext[5:].decode("utf-8", errors="replace")
 
             assert timestamp == expected_timestamp
             assert msg_type == expected_type
@@ -360,7 +353,7 @@ class TestMessageFormatParsing:
             pytest.fail("Should not parse metadata for short messages")
         else:
             # Should fall back to raw decode
-            message = plaintext.decode('utf-8', errors='replace')
+            message = plaintext.decode("utf-8", errors="replace")
             assert message == "Hi"
 
 
@@ -378,15 +371,15 @@ class TestPlaintextParsers:
         txt_type_byte = (TXT_TYPE_PLAIN << 2) | 0  # attempt = 0
         message = b"Hello world"
 
-        plaintext = struct.pack('<I', timestamp) + bytes([txt_type_byte]) + message
+        plaintext = struct.pack("<I", timestamp) + bytes([txt_type_byte]) + message
 
         result = parse_txt_msg_plaintext(plaintext)
 
-        assert result['timestamp'] == timestamp
-        assert result['txt_type'] == TXT_TYPE_PLAIN
-        assert result['txt_type_name'] == "PLAIN"
-        assert result['txt_attempt'] == 0
-        assert result['txt_plaintext_message'] == "Hello world"
+        assert result["timestamp"] == timestamp
+        assert result["txt_type"] == TXT_TYPE_PLAIN
+        assert result["txt_type_name"] == "PLAIN"
+        assert result["txt_attempt"] == 0
+        assert result["txt_plaintext_message"] == "Hello world"
 
     def test_parse_txt_msg_cli_data(self):
         """Test parsing CLI command message."""
@@ -398,14 +391,14 @@ class TestPlaintextParsers:
         txt_type_byte = (TXT_TYPE_CLI_DATA << 2) | 2  # attempt = 2
         command = b"/stats"
 
-        plaintext = struct.pack('<I', timestamp) + bytes([txt_type_byte]) + command
+        plaintext = struct.pack("<I", timestamp) + bytes([txt_type_byte]) + command
 
         result = parse_txt_msg_plaintext(plaintext)
 
-        assert result['txt_type'] == TXT_TYPE_CLI_DATA
-        assert result['txt_type_name'] == "CLI_DATA"
-        assert result['txt_attempt'] == 2
-        assert result['txt_plaintext_message'] == "/stats"
+        assert result["txt_type"] == TXT_TYPE_CLI_DATA
+        assert result["txt_type_name"] == "CLI_DATA"
+        assert result["txt_attempt"] == 2
+        assert result["txt_plaintext_message"] == "/stats"
 
     def test_parse_txt_msg_signed(self):
         """Test parsing signed plain text message."""
@@ -418,20 +411,15 @@ class TestPlaintextParsers:
         sender_prefix = bytes.fromhex("aabbccdd")
         message = b"Signed message"
 
-        plaintext = (
-            struct.pack('<I', timestamp) +
-            bytes([txt_type_byte]) +
-            sender_prefix +
-            message
-        )
+        plaintext = struct.pack("<I", timestamp) + bytes([txt_type_byte]) + sender_prefix + message
 
         result = parse_txt_msg_plaintext(plaintext)
 
-        assert result['txt_type'] == TXT_TYPE_SIGNED_PLAIN
-        assert result['txt_type_name'] == "SIGNED_PLAIN"
-        assert result['txt_attempt'] == 1
-        assert result['txt_signed_sender_prefix'] == "aabbccdd"
-        assert result['txt_plaintext_message'] == "Signed message"
+        assert result["txt_type"] == TXT_TYPE_SIGNED_PLAIN
+        assert result["txt_type_name"] == "SIGNED_PLAIN"
+        assert result["txt_attempt"] == 1
+        assert result["txt_signed_sender_prefix"] == "aabbccdd"
+        assert result["txt_plaintext_message"] == "Signed message"
 
     def test_parse_req_get_stats(self):
         """Test parsing GET_STATS request."""
@@ -441,20 +429,16 @@ class TestPlaintextParsers:
 
         timestamp = 1234567890
         req_type = REQ_TYPE_GET_STATS
-        req_data = b'\x01\x02\x03\x04'
+        req_data = b"\x01\x02\x03\x04"
 
-        plaintext = (
-            struct.pack('<I', timestamp) +
-            bytes([req_type]) +
-            req_data
-        )
+        plaintext = struct.pack("<I", timestamp) + bytes([req_type]) + req_data
 
         result = parse_req_plaintext(plaintext)
 
-        assert result['req_timestamp'] == timestamp
-        assert result['req_type'] == REQ_TYPE_GET_STATS
-        assert result['req_type_name'] == "GET_STATS"
-        assert result['req_data_hex'] == "01020304"
+        assert result["req_timestamp"] == timestamp
+        assert result["req_type"] == REQ_TYPE_GET_STATS
+        assert result["req_type_name"] == "GET_STATS"
+        assert result["req_data_hex"] == "01020304"
 
     def test_parse_response(self):
         """Test parsing response packet."""
@@ -463,14 +447,14 @@ class TestPlaintextParsers:
         from meshmap.crypto import parse_response_plaintext
 
         timestamp = 1234567890
-        response_data = b'Response data payload'
+        response_data = b"Response data payload"
 
-        plaintext = struct.pack('<I', timestamp) + response_data
+        plaintext = struct.pack("<I", timestamp) + response_data
 
         result = parse_response_plaintext(plaintext)
 
-        assert result['resp_timestamp'] == timestamp
-        assert result['resp_data_hex'] == response_data.hex()
+        assert result["resp_timestamp"] == timestamp
+        assert result["resp_data_hex"] == response_data.hex()
 
     def test_parse_response_get_neighbors(self):
         """Test parsing GET_NEIGHBORS response with neighbor list."""
@@ -492,34 +476,34 @@ class TestPlaintextParsers:
         neighbor2_snr = -16  # SNR = -4.0 dB (-4.0 * 4 = -16)
 
         response_data = (
-            struct.pack('<H', neighbours_count) +
-            struct.pack('<H', results_count) +
-            neighbor1_pubkey +
-            struct.pack('<I', neighbor1_heard_ago) +
-            struct.pack('b', neighbor1_snr) +
-            neighbor2_pubkey +
-            struct.pack('<I', neighbor2_heard_ago) +
-            struct.pack('b', neighbor2_snr)
+            struct.pack("<H", neighbours_count)
+            + struct.pack("<H", results_count)
+            + neighbor1_pubkey
+            + struct.pack("<I", neighbor1_heard_ago)
+            + struct.pack("b", neighbor1_snr)
+            + neighbor2_pubkey
+            + struct.pack("<I", neighbor2_heard_ago)
+            + struct.pack("b", neighbor2_snr)
         )
 
-        plaintext = struct.pack('<I', timestamp) + response_data
+        plaintext = struct.pack("<I", timestamp) + response_data
 
         result = parse_response_plaintext(plaintext)
 
-        assert result['resp_timestamp'] == timestamp
-        assert result['resp_neighbours_total_count'] == 5
-        assert result['resp_neighbours_results_count'] == 2
-        assert len(result['resp_neighbours_list']) == 2
+        assert result["resp_timestamp"] == timestamp
+        assert result["resp_neighbours_total_count"] == 5
+        assert result["resp_neighbours_results_count"] == 2
+        assert len(result["resp_neighbours_list"]) == 2
 
         # Check first neighbor
-        assert result['resp_neighbours_list'][0]['pubkey'] == "aabbccdd"
-        assert result['resp_neighbours_list'][0]['heard_seconds_ago'] == 120
-        assert result['resp_neighbours_list'][0]['snr'] == 8.0
+        assert result["resp_neighbours_list"][0]["pubkey"] == "aabbccdd"
+        assert result["resp_neighbours_list"][0]["heard_seconds_ago"] == 120
+        assert result["resp_neighbours_list"][0]["snr"] == 8.0
 
         # Check second neighbor
-        assert result['resp_neighbours_list'][1]['pubkey'] == "11223344"
-        assert result['resp_neighbours_list'][1]['heard_seconds_ago'] == 3600
-        assert result['resp_neighbours_list'][1]['snr'] == -4.0
+        assert result["resp_neighbours_list"][1]["pubkey"] == "11223344"
+        assert result["resp_neighbours_list"][1]["heard_seconds_ago"] == 3600
+        assert result["resp_neighbours_list"][1]["snr"] == -4.0
 
     def test_parse_response_get_neighbors_with_contacts(self):
         """Test GET_NEIGHBORS response with contact name matching."""
@@ -541,44 +525,44 @@ class TestPlaintextParsers:
         neighbor2_snr = 20
 
         response_data = (
-            struct.pack('<H', neighbours_count) +
-            struct.pack('<H', results_count) +
-            neighbor1_pubkey +
-            struct.pack('<I', neighbor1_heard_ago) +
-            struct.pack('b', neighbor1_snr) +
-            neighbor2_pubkey +
-            struct.pack('<I', neighbor2_heard_ago) +
-            struct.pack('b', neighbor2_snr)
+            struct.pack("<H", neighbours_count)
+            + struct.pack("<H", results_count)
+            + neighbor1_pubkey
+            + struct.pack("<I", neighbor1_heard_ago)
+            + struct.pack("b", neighbor1_snr)
+            + neighbor2_pubkey
+            + struct.pack("<I", neighbor2_heard_ago)
+            + struct.pack("b", neighbor2_snr)
         )
 
-        plaintext = struct.pack('<I', timestamp) + response_data
+        plaintext = struct.pack("<I", timestamp) + response_data
 
         # Create contact map
         contacts = {
             "d2590aed87376d5755a30700bc7d54afc3bab1d6e1ebdbf64c1bae09d3f77d59": {
                 "adv_name": "Puerta del Ángel",
-                "adv_type": "REPEATER"
+                "adv_type": "REPEATER",
             },
             "ffaabbccdd1122334455667788990011223344556677889900112233445566": {
                 "adv_name": "Unknown Node",
-                "adv_type": "CHAT"
-            }
+                "adv_type": "CHAT",
+            },
         }
 
         result = parse_response_plaintext(plaintext, contacts)
 
-        assert result['resp_neighbours_total_count'] == 2
-        assert result['resp_neighbours_results_count'] == 2
-        assert len(result['resp_neighbours_list']) == 2
+        assert result["resp_neighbours_total_count"] == 2
+        assert result["resp_neighbours_results_count"] == 2
+        assert len(result["resp_neighbours_list"]) == 2
 
         # First neighbor - no match in contacts
-        assert result['resp_neighbours_list'][0]['pubkey'] == "aabbccdd"
-        assert 'name' not in result['resp_neighbours_list'][0]
+        assert result["resp_neighbours_list"][0]["pubkey"] == "aabbccdd"
+        assert "name" not in result["resp_neighbours_list"][0]
 
         # Second neighbor - matches contact
-        assert result['resp_neighbours_list'][1]['pubkey'] == "d2590aed"
-        assert result['resp_neighbours_list'][1]['name'] == "Puerta del Ángel"
-        assert result['resp_neighbours_list'][1]['snr'] == 5.0
+        assert result["resp_neighbours_list"][1]["pubkey"] == "d2590aed"
+        assert result["resp_neighbours_list"][1]["name"] == "Puerta del Ángel"
+        assert result["resp_neighbours_list"][1]["snr"] == 5.0
 
     def test_parse_path_with_ack(self):
         """Test parsing PATH packet with ACK extra."""
@@ -587,24 +571,19 @@ class TestPlaintextParsers:
         from meshmap.crypto import parse_path_plaintext
 
         path_len = 3
-        path_hops = b'\xaa\xbb\xcc'
+        path_hops = b"\xaa\xbb\xcc"
         extra_type = 0x03  # ACK
         ack_crc = 0x12345678
 
-        plaintext = (
-            bytes([path_len]) +
-            path_hops +
-            bytes([extra_type]) +
-            struct.pack('<I', ack_crc)
-        )
+        plaintext = bytes([path_len]) + path_hops + bytes([extra_type]) + struct.pack("<I", ack_crc)
 
         result = parse_path_plaintext(plaintext)
 
-        assert result['path_return_len'] == 3
-        assert result['path_return_hops'] == ['0xaa', '0xbb', '0xcc']
-        assert result['path_extra_type'] == 0x03
-        assert result['path_extra_type_name'] == 'ACK'
-        assert result['path_extra_ack_crc'] == '0x12345678'
+        assert result["path_return_len"] == 3
+        assert result["path_return_hops"] == ["0xaa", "0xbb", "0xcc"]
+        assert result["path_extra_type"] == 0x03
+        assert result["path_extra_type_name"] == "ACK"
+        assert result["path_extra_ack_crc"] == "0x12345678"
 
     def test_parse_anon_req_room_login(self):
         """Test parsing ANON_REQ room login."""
@@ -616,17 +595,13 @@ class TestPlaintextParsers:
         sync_since = 1234500000
         password = b"mypassword"
 
-        plaintext = (
-            struct.pack('<I', timestamp) +
-            struct.pack('<I', sync_since) +
-            password
-        )
+        plaintext = struct.pack("<I", timestamp) + struct.pack("<I", sync_since) + password
 
-        result = parse_anon_req_plaintext(plaintext, recipient_type='ROOM')
+        result = parse_anon_req_plaintext(plaintext, recipient_type="ROOM")
 
-        assert result['anon_req_timestamp'] == timestamp
-        assert result['anon_room_sync_since'] == sync_since
-        assert result['anon_password'] == "mypassword"
+        assert result["anon_req_timestamp"] == timestamp
+        assert result["anon_room_sync_since"] == sync_since
+        assert result["anon_password"] == "mypassword"
 
     def test_parse_grp_txt(self):
         """Test parsing group text message."""
@@ -638,20 +613,16 @@ class TestPlaintextParsers:
         txt_type = TXT_TYPE_PLAIN
         message = b"Alice: Hello everyone"
 
-        plaintext = (
-            struct.pack('<I', timestamp) +
-            bytes([txt_type]) +
-            message
-        )
+        plaintext = struct.pack("<I", timestamp) + bytes([txt_type]) + message
 
         result = parse_grp_txt_plaintext(plaintext)
 
-        assert result['grp_timestamp'] == timestamp
-        assert result['grp_txt_type'] == TXT_TYPE_PLAIN
-        assert result['grp_txt_type_name'] == "PLAIN"
-        assert result['grp_sender_name'] == "Alice"
-        assert result['grp_message_text'] == "Hello everyone"
-        assert result['raw_message'] == "Alice: Hello everyone"
+        assert result["grp_timestamp"] == timestamp
+        assert result["grp_txt_type"] == TXT_TYPE_PLAIN
+        assert result["grp_txt_type_name"] == "PLAIN"
+        assert result["grp_sender_name"] == "Alice"
+        assert result["grp_message_text"] == "Hello everyone"
+        assert result["raw_message"] == "Alice: Hello everyone"
 
 
 class TestVerifyMacAndDecrypt:
@@ -671,7 +642,7 @@ class TestVerifyMacAndDecrypt:
 
     def test_correct_mac_decrypts(self) -> None:
         """Valid MAC + ciphertext round-trips back to the original plaintext."""
-        secret = b'\x01' * 32
+        secret = b"\x01" * 32
         plaintext = b"Hello World!!!!!"  # exactly 16 bytes (one AES block)
         mac_and_ct = self._make_mac_and_ciphertext(secret, plaintext)
         result = verify_mac_and_decrypt(secret, mac_and_ct)
@@ -680,7 +651,7 @@ class TestVerifyMacAndDecrypt:
 
     def test_wrong_mac_returns_none(self) -> None:
         """Corrupted MAC byte causes MAC verification to fail."""
-        secret = b'\x01' * 32
+        secret = b"\x01" * 32
         plaintext = b"Hello World!!!!!"
         mac_and_ct = self._make_mac_and_ciphertext(secret, plaintext)
         bad_data = bytes([mac_and_ct[0] ^ 0xFF, mac_and_ct[1] ^ 0xFF]) + mac_and_ct[2:]
@@ -688,15 +659,15 @@ class TestVerifyMacAndDecrypt:
 
     def test_empty_payload_returns_none(self) -> None:
         """Zero-byte payload returns None (too short for MAC)."""
-        assert verify_mac_and_decrypt(b'\x00' * 32, b'') is None
+        assert verify_mac_and_decrypt(b"\x00" * 32, b"") is None
 
     def test_one_byte_payload_returns_none(self) -> None:
         """Single-byte payload returns None (too short for 2-byte MAC)."""
-        assert verify_mac_and_decrypt(b'\x00' * 32, b'\xab') is None
+        assert verify_mac_and_decrypt(b"\x00" * 32, b"\xab") is None
 
     def test_null_padding_stripped(self) -> None:
         """Trailing null bytes in plaintext are stripped before return."""
-        secret = b'\x02' * 32
+        secret = b"\x02" * 32
         # 16-byte AES block with trailing nulls simulating short message padded to block size
         plaintext = b"Short\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"  # 16 bytes
         mac_and_ct = self._make_mac_and_ciphertext(secret, plaintext)
@@ -705,8 +676,8 @@ class TestVerifyMacAndDecrypt:
 
     def test_wrong_secret_returns_none(self) -> None:
         """Using a different secret fails MAC check."""
-        secret_a = b'\x03' * 32
-        secret_b = b'\x04' * 32
+        secret_a = b"\x03" * 32
+        secret_b = b"\x04" * 32
         plaintext = b"Secret message!!"  # 16 bytes
         mac_and_ct = self._make_mac_and_ciphertext(secret_a, plaintext)
         assert verify_mac_and_decrypt(secret_b, mac_and_ct) is None
@@ -723,14 +694,14 @@ class TestParserEdgeCases:
 
         # Valid header but no entries
         plaintext = (
-            struct.pack('<I', 1_234_567_890) +  # timestamp
-            struct.pack('<H', 5) +              # neighbours_count = 5
-            struct.pack('<H', 0)               # results_count = 0
+            struct.pack("<I", 1_234_567_890)  # timestamp
+            + struct.pack("<H", 5)  # neighbours_count = 5
+            + struct.pack("<H", 0)  # results_count = 0
         )
         result = parse_response_plaintext(plaintext)
         # Should fall through to generic response (can't infer entry size with 0 results)
-        assert 'resp_timestamp' in result
-        assert result['resp_timestamp'] == 1_234_567_890
+        assert "resp_timestamp" in result
+        assert result["resp_timestamp"] == 1_234_567_890
 
     def test_parse_response_generic_fallback(self) -> None:
         """Short response that is not GET_NEIGHBORS parses as generic."""
@@ -738,29 +709,29 @@ class TestParserEdgeCases:
 
         from meshmap.crypto import parse_response_plaintext
 
-        plaintext = struct.pack('<I', 999) + b'\xde\xad\xbe\xef'
+        plaintext = struct.pack("<I", 999) + b"\xde\xad\xbe\xef"
         result = parse_response_plaintext(plaintext)
-        assert result['resp_timestamp'] == 999
-        assert result['resp_data_hex'] == 'deadbeef'
-        assert 'resp_neighbours_list' not in result
+        assert result["resp_timestamp"] == 999
+        assert result["resp_data_hex"] == "deadbeef"
+        assert "resp_neighbours_list" not in result
 
     def test_parse_path_with_response_extra(self) -> None:
         """PATH extra_type=RESPONSE (0x01) stores extra payload hex."""
         from meshmap.crypto import parse_path_plaintext
 
         path_len = 1
-        path_hops = b'\xcc'
+        path_hops = b"\xcc"
         extra_type = 0x01  # RESPONSE
-        extra_payload = b'\x11\x22\x33'
+        extra_payload = b"\x11\x22\x33"
 
         plaintext = bytes([path_len]) + path_hops + bytes([extra_type]) + extra_payload
         result = parse_path_plaintext(plaintext)
 
-        assert result['path_return_len'] == 1
-        assert result['path_return_hops'] == ['0xcc']
-        assert result['path_extra_type'] == 0x01
-        assert result['path_extra_type_name'] == 'RESPONSE'
-        assert result['path_extra_payload_hex'] == '112233'
+        assert result["path_return_len"] == 1
+        assert result["path_return_hops"] == ["0xcc"]
+        assert result["path_extra_type"] == 0x01
+        assert result["path_extra_type_name"] == "RESPONSE"
+        assert result["path_extra_payload_hex"] == "112233"
 
     def test_parse_path_with_dummy_extra(self) -> None:
         """PATH extra_type=0xFF is recognised as DUMMY."""
@@ -768,8 +739,8 @@ class TestParserEdgeCases:
 
         plaintext = bytes([0, 0xFF])  # path_len=0, extra_type=DUMMY
         result = parse_path_plaintext(plaintext)
-        assert result['path_extra_type'] == 0xFF
-        assert result['path_extra_type_name'] == 'DUMMY'
+        assert result["path_extra_type"] == 0xFF
+        assert result["path_extra_type_name"] == "DUMMY"
 
     def test_parse_anon_req_repeater(self) -> None:
         """ANON_REQ to REPEATER: [timestamp:4][password:variable]."""
@@ -779,11 +750,11 @@ class TestParserEdgeCases:
 
         timestamp = 1_234_567_890
         password = b"secret"
-        plaintext = struct.pack('<I', timestamp) + password
+        plaintext = struct.pack("<I", timestamp) + password
 
-        result = parse_anon_req_plaintext(plaintext, recipient_type='REPEATER')
-        assert result['anon_req_timestamp'] == timestamp
-        assert result['anon_password'] == "secret"
+        result = parse_anon_req_plaintext(plaintext, recipient_type="REPEATER")
+        assert result["anon_req_timestamp"] == timestamp
+        assert result["anon_password"] == "secret"
 
     def test_parse_anon_req_sensor(self) -> None:
         """ANON_REQ to SENSOR: same format as REPEATER."""
@@ -793,11 +764,11 @@ class TestParserEdgeCases:
 
         timestamp = 9_999_999
         password = b"sensorpass\x00"
-        plaintext = struct.pack('<I', timestamp) + password
+        plaintext = struct.pack("<I", timestamp) + password
 
-        result = parse_anon_req_plaintext(plaintext, recipient_type='SENSOR')
-        assert result['anon_req_timestamp'] == timestamp
-        assert result['anon_password'] == "sensorpass"  # null stripped
+        result = parse_anon_req_plaintext(plaintext, recipient_type="SENSOR")
+        assert result["anon_req_timestamp"] == timestamp
+        assert result["anon_password"] == "sensorpass"  # null stripped
 
     def test_parse_anon_req_generic(self) -> None:
         """ANON_REQ without recipient_type: generic parsing stores hex."""
@@ -806,9 +777,9 @@ class TestParserEdgeCases:
         from meshmap.crypto import parse_anon_req_plaintext
 
         timestamp = 1_111_111
-        extra = b'\xaa\xbb\xcc\xdd'
-        plaintext = struct.pack('<I', timestamp) + extra
+        extra = b"\xaa\xbb\xcc\xdd"
+        plaintext = struct.pack("<I", timestamp) + extra
 
         result = parse_anon_req_plaintext(plaintext, recipient_type=None)
-        assert result['anon_req_timestamp'] == timestamp
-        assert result['anon_req_data_hex'] == 'aabbccdd'
+        assert result["anon_req_timestamp"] == timestamp
+        assert result["anon_req_data_hex"] == "aabbccdd"

@@ -27,9 +27,7 @@ class MeshScanner:
         """Connect to the meshcore network via serial port."""
         print(f"Connecting to meshcore network on {self.serial_port}...")
         self.mesh = await meshcore.MeshCore.create_serial(
-            port=self.serial_port,
-            baudrate=self.baudrate,
-            debug=self.debug
+            port=self.serial_port, baudrate=self.baudrate, debug=self.debug
         )
         print("Connected successfully!")
         if self.debug and self.mesh:
@@ -54,7 +52,7 @@ class MeshScanner:
         discovered_nodes: set = set()
 
         async def on_advert(event: Any) -> None:
-            name = event.payload.get('adv_name') or event.payload.get('name', 'Unknown')
+            name = event.payload.get("adv_name") or event.payload.get("name", "Unknown")
             if name not in discovered_nodes:
                 discovered_nodes.add(name)
                 print(f"  ✓ Heard: {name}")
@@ -104,22 +102,22 @@ class MeshScanner:
         for public_key, contact in contacts.items():
             # Filter for 0-hop nodes (directly connected)
             # out_path_len: 0 means directly connected, -1 means unknown path
-            out_path_len = contact.get('out_path_len', -1)
-            contact_type = contact.get('type', 0)  # 1=contact, 2=repeater
+            out_path_len = contact.get("out_path_len", -1)
+            contact_type = contact.get("type", 0)  # 1=contact, 2=repeater
 
             if self.debug:
-                name = contact.get('adv_name', 'Unknown')
+                name = contact.get("adv_name", "Unknown")
                 print(f"  Contact: {name} - path_len={out_path_len}, type={contact_type}")
 
             if out_path_len == 0:
                 node_info = {
-                    'public_key': public_key,
-                    'name': contact.get('adv_name', 'Unknown'),
-                    'type': 'repeater' if contact_type == 2 else 'contact',
-                    'out_path_len': out_path_len,
-                    'last_advert': contact.get('last_advert'),
-                    'lat': contact.get('adv_lat'),
-                    'lon': contact.get('adv_lon'),
+                    "public_key": public_key,
+                    "name": contact.get("adv_name", "Unknown"),
+                    "type": "repeater" if contact_type == 2 else "contact",
+                    "out_path_len": out_path_len,
+                    "last_advert": contact.get("last_advert"),
+                    "lat": contact.get("adv_lat"),
+                    "lon": contact.get("adv_lon"),
                 }
                 zero_hop_nodes.append(node_info)
                 self.nodes[public_key] = node_info
@@ -152,12 +150,12 @@ class MeshScanner:
         discovered: dict[str, dict[str, Any]] = {}
 
         async def on_discover(event: Any) -> None:
-            node_type = event.payload.get('node_type', 0)
+            node_type = event.payload.get("node_type", 0)
             if node_type != 2:
                 return
-            pubkey = event.payload.get('pubkey', '')
+            pubkey = event.payload.get("pubkey", "")
             if pubkey and pubkey not in discovered:
-                snr = event.payload.get('SNR_in')
+                snr = event.payload.get("SNR_in")
                 snr_str = f"{snr:+.1f} dB" if snr is not None else "?"
                 print(f"  ✓ Repeater: {pubkey[:16]}… SNR={snr_str}")
                 discovered[pubkey] = event.payload
@@ -181,16 +179,18 @@ class MeshScanner:
                 (c for pk, c in contacts.items() if pk.lower().startswith(pubkey[:8].lower())),
                 None,
             )
-            repeaters.append({
-                'public_key': pubkey,
-                'name': contact.get('adv_name') if contact else f'Unknown ({pubkey[:8]}…)',
-                'type': 'repeater',
-                'out_path_len': 0,
-                'snr': disc.get('SNR_in'),
-                'lat': contact.get('adv_lat') if contact else None,
-                'lon': contact.get('adv_lon') if contact else None,
-                'last_advert': contact.get('last_advert') if contact else None,
-            })
+            repeaters.append(
+                {
+                    "public_key": pubkey,
+                    "name": contact.get("adv_name") if contact else f"Unknown ({pubkey[:8]}…)",
+                    "type": "repeater",
+                    "out_path_len": 0,
+                    "snr": disc.get("SNR_in"),
+                    "lat": contact.get("adv_lat") if contact else None,
+                    "lon": contact.get("adv_lon") if contact else None,
+                    "last_advert": contact.get("last_advert") if contact else None,
+                }
+            )
 
         print(f"\nTotal 0-hop repeaters discovered: {len(repeaters)}")
         return repeaters
@@ -210,7 +210,7 @@ class MeshScanner:
         if not self.mesh:
             raise RuntimeError("Not connected. Call connect() first.")
 
-        name = contact.get('adv_name', 'Unknown')
+        name = contact.get("adv_name", "Unknown")
         print(f"Attempting guest login to: {name}")
 
         try:
@@ -256,17 +256,18 @@ class MeshScanner:
             print(f"  ✓ Logged out from {name}")
 
             return {
-                'contact': name,
-                'public_key': contact.get('public_key'),
-                'neighbors': neighbors,
-                'basic_info': basic_info,
-                'status': status,
+                "contact": name,
+                "public_key": contact.get("public_key"),
+                "neighbors": neighbors,
+                "basic_info": basic_info,
+                "status": status,
             }
 
         except Exception as e:
             print(f"  ✗ Failed to login/query {name}: {e}")
             if self.debug:
                 import traceback
+
                 traceback.print_exc()
             return None
 
@@ -308,22 +309,22 @@ class MeshScanner:
         async def on_rf_data(event: Any) -> None:
             """Handle RF log data events."""
             data = event.payload
-            payload_hex = data.get('raw_hex', '')
-            snr = data.get('snr')
-            rssi = data.get('rssi')
+            payload_hex = data.get("raw_hex", "")
+            snr = data.get("snr")
+            rssi = data.get("rssi")
 
             # Try to extract node identifier from payload
             # First few bytes often contain source info
             if len(payload_hex) >= 16:
                 node_prefix = payload_hex[:16]
 
-                if node_prefix not in rf_nodes or rssi > rf_nodes[node_prefix].get('rssi', -999):
+                if node_prefix not in rf_nodes or rssi > rf_nodes[node_prefix].get("rssi", -999):
                     rf_nodes[node_prefix] = {
-                        'node_prefix': node_prefix,
-                        'snr': snr,
-                        'rssi': rssi,
-                        'payload_length': data.get('payload_length', 0),
-                        'sample_payload': payload_hex[:32],
+                        "node_prefix": node_prefix,
+                        "snr": snr,
+                        "rssi": rssi,
+                        "payload_length": data.get("payload_length", 0),
+                        "sample_payload": payload_hex[:32],
                     }
 
                 packet_counts[node_prefix] += 1
@@ -342,11 +343,11 @@ class MeshScanner:
         # Build results
         results = []
         for node_prefix, info in rf_nodes.items():
-            info['packet_count'] = packet_counts[node_prefix]
+            info["packet_count"] = packet_counts[node_prefix]
             results.append(info)
 
         # Sort by signal strength (RSSI)
-        results.sort(key=lambda x: x['rssi'], reverse=True)
+        results.sort(key=lambda x: x["rssi"], reverse=True)
 
         print(f"\nDiscovered {len(results)} nodes from RF activity:")
         for node in results:

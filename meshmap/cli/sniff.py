@@ -11,24 +11,24 @@ from meshmap.sniffer import PacketSniffer
 
 
 @click.command()
-@click.argument('duration', type=int)
+@click.argument("duration", type=int)
 @click.option(
-    '--decrypt', '-k',
-    'keyfiles',
+    "--decrypt",
+    "-k",
+    "keyfiles",
     multiple=True,
     type=click.Path(exists=True, path_type=Path),
-    help='Path to private key file for decrypting packets (can be used multiple times)'
+    help="Path to private key file for decrypting packets (can be used multiple times)",
 )
 @click.option(
-    '--channel', '-c',
-    'channels',
+    "--channel",
+    "-c",
+    "channels",
     multiple=True,
-    help='Channel name to decrypt (e.g., #general, #public). Can be used multiple times.'
+    help="Channel name to decrypt (e.g., #general, #public). Can be used multiple times.",
 )
 @click.option(
-    '--hexdump/--no-hexdump', '-x',
-    default=False,
-    help='Show hexdump of decrypted payloads'
+    "--hexdump/--no-hexdump", "-x", default=False, help="Show hexdump of decrypted payloads"
 )
 @click.pass_context
 def sniff(ctx, duration: int, keyfiles: tuple[Path, ...], channels: tuple[str, ...], hexdump: bool):
@@ -41,15 +41,17 @@ def sniff(ctx, duration: int, keyfiles: tuple[Path, ...], channels: tuple[str, .
         meshmap -p /dev/ttyUSB0 sniff 60 -k mykey.txt -c '#general' -c '#public'
         meshmap -p /dev/ttyUSB0 sniff 60 -k key1.txt -k key2.txt --hexdump
     """
-    asyncio.run(do_sniff(
-        ctx.obj['serial_port'],
-        ctx.obj['debug'],
-        ctx.obj['baudrate'],
-        duration,
-        list(keyfiles),
-        list(channels),
-        hexdump
-    ))
+    asyncio.run(
+        do_sniff(
+            ctx.obj["serial_port"],
+            ctx.obj["debug"],
+            ctx.obj["baudrate"],
+            duration,
+            list(keyfiles),
+            list(channels),
+            hexdump,
+        )
+    )
 
 
 async def do_sniff(
@@ -59,7 +61,7 @@ async def do_sniff(
     duration: int,
     keyfiles: list[Path],
     channels: list[str],
-    hexdump: bool
+    hexdump: bool,
 ) -> None:
     """Sniff and decode RF packets."""
     try:
@@ -75,21 +77,18 @@ async def do_sniff(
                     click.echo(
                         f"Error: Invalid private key length in {keyfile}. "
                         f"Expected 128 hex chars, got {len(private_key_hex)}",
-                        err=True
+                        err=True,
                     )
                     sys.exit(1)
 
-                if not all(c in '0123456789abcdefABCDEF' for c in private_key_hex):
+                if not all(c in "0123456789abcdefABCDEF" for c in private_key_hex):
                     click.echo(
                         f"Error: Invalid private key format in {keyfile}. Must be hexadecimal.",
-                        err=True
+                        err=True,
                     )
                     sys.exit(1)
 
-                private_keys.append({
-                    'hex': private_key_hex,
-                    'file': str(keyfile)
-                })
+                private_keys.append({"hex": private_key_hex, "file": str(keyfile)})
 
             except FileNotFoundError:
                 click.echo(f"Error: Private key file not found: {keyfile}", err=True)
@@ -116,7 +115,7 @@ async def do_sniff(
                 duration=duration,
                 private_keys=private_keys if private_keys else None,
                 channel_names=channel_names if channel_names else None,
-                show_hexdump=hexdump
+                show_hexdump=hexdump,
             )
 
         await scanner.disconnect()
@@ -128,5 +127,6 @@ async def do_sniff(
         click.echo(f"Error: {e}", err=True)
         if debug:
             import traceback
+
             traceback.print_exc()
         sys.exit(1)
