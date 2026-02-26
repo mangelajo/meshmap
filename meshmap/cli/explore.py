@@ -382,7 +382,7 @@ async def _login_fetch_logout(
     target_pk = contact.get("public_key", "")
     _fetch_attempts = 3
     logged_in = False
-    strategy_used = None
+    route_desc = ""
 
     # ── Strategy 1: Graph-computed route ─────────────────────────────────────
     if graph is not None and self_pubkey:
@@ -395,52 +395,42 @@ async def _login_fetch_logout(
                 hop_names.append(node.name or pk[:8] if node else pk[:8])
             if hop_names:
                 via = " → ".join(hop_names)
-                console.print(
-                    f"  [blue]Route[/blue] graph path via {len(route)} hop(s): {via} "
-                    f"[dim](path={path_hex})[/dim]"
-                )
+                route_desc = f"computed path via {via}"
+                console.print(f"  [blue]Trying[/blue] {route_desc} [dim](path={path_hex})[/dim]")
             else:
-                console.print("  [blue]Route[/blue] graph path: direct")
+                route_desc = "computed direct path"
+                console.print(f"  [blue]Trying[/blue] {route_desc}")
             await mesh.commands.change_contact_path(contact, path_hex)
             logged_in = await _try_login(mesh, contact, password, attempts=3)
-            if logged_in:
-                strategy_used = "graph"
-            else:
-                console.print("  [yellow]Route[/yellow] graph path failed")
+            if not logged_in:
+                console.print(f"  [yellow]Failed[/yellow] {route_desc}")
         else:
-            console.print("  [dim]Route: no graph path available[/dim]")
+            console.print("  [dim]No computed path available[/dim]")
 
     # ── Strategy 2: Existing device route ────────────────────────────────────
     if not logged_in:
         out_path = contact.get("out_path", "")
         out_path_len = contact.get("out_path_len", 0)
         if out_path and out_path_len and out_path_len > 0:
-            console.print(
-                f"  [blue]Route[/blue] device path "
-                f"[dim](path={out_path[: out_path_len * 2]}, {out_path_len} hop(s))[/dim]"
-            )
+            route_desc = f"cached device route [dim](path={out_path[: out_path_len * 2]}, {out_path_len} hop(s))[/dim]"
         else:
-            console.print("  [blue]Route[/blue] device path [dim](direct)[/dim]")
+            route_desc = "cached device route [dim](direct)[/dim]"
+        console.print(f"  [blue]Trying[/blue] {route_desc}")
         logged_in = await _try_login(mesh, contact, password, attempts=2)
-        if logged_in:
-            strategy_used = "device"
-        else:
-            console.print("  [yellow]Route[/yellow] device path failed")
+        if not logged_in:
+            console.print("  [yellow]Failed[/yellow] cached device route")
 
     # ── Strategy 3: Flood routing ────────────────────────────────────────────
     if not logged_in:
-        console.print("  [blue]Route[/blue] flood routing")
+        route_desc = "flood routing"
+        console.print(f"  [blue]Trying[/blue] {route_desc}")
         await mesh.commands.reset_path(contact)
         logged_in = await _try_login(mesh, contact, password, attempts=2)
-        if logged_in:
-            strategy_used = "flood"
-        else:
-            console.print("  [yellow]Route[/yellow] flood failed")
+        if not logged_in:
+            console.print(f"  [yellow]Failed[/yellow] {route_desc}")
 
     if not logged_in:
         raise RuntimeError(f"Could not log in to {name!r} after all routing strategies")
-
-    console.print(f"  [green]Route[/green] connected via [bold]{strategy_used}[/bold]")
 
     # ── Fetch phase ──────────────────────────────────────────────────────────
     result = None
