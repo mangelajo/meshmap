@@ -401,12 +401,14 @@ async def _login_fetch_logout(
     _fetch_attempts = 3
     logged_in = False
     route_desc = ""
+    tried_path_hex: str | None = None  # track which path we already tried
 
     # ── Strategy 1: Graph-computed route ─────────────────────────────────────
     if graph is not None and self_pubkey:
         route = graph.find_route(self_pubkey, target_pk)
         if route is not None:
             path_hex = graph.route_to_path_hex(route)
+            tried_path_hex = path_hex
             hop_names = []
             for pk in route:
                 node = graph.nodes.get(pk)
@@ -430,13 +432,24 @@ async def _login_fetch_logout(
         out_path = contact.get("out_path", "")
         out_path_len = contact.get("out_path_len", 0)
         if out_path and out_path_len and out_path_len > 0:
-            route_desc = f"cached device route [dim](path={out_path[: out_path_len * 2]}, {out_path_len} hop(s))[/dim]"
+            device_path_hex = out_path[: out_path_len * 2]
         else:
-            route_desc = "cached device route [dim](direct)[/dim]"
-        console.print(f"  [blue]Trying[/blue] {route_desc}")
-        logged_in = await _try_login(mesh, contact, password, attempts=2)
-        if not logged_in:
-            console.print("  [yellow]Failed[/yellow] cached device route")
+            device_path_hex = ""
+
+        if tried_path_hex is not None and device_path_hex == tried_path_hex:
+            console.print("  [dim]Skipping cached device route (same as computed path)[/dim]")
+        else:
+            if device_path_hex:
+                route_desc = (
+                    f"cached device route "
+                    f"[dim](path={device_path_hex}, {out_path_len} hop(s))[/dim]"
+                )
+            else:
+                route_desc = "cached device route [dim](direct)[/dim]"
+            console.print(f"  [blue]Trying[/blue] {route_desc}")
+            logged_in = await _try_login(mesh, contact, password, attempts=2)
+            if not logged_in:
+                console.print("  [yellow]Failed[/yellow] cached device route")
 
     # ── Strategy 3: Flood routing ────────────────────────────────────────────
     if not logged_in:
