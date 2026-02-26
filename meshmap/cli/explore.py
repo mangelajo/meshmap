@@ -223,6 +223,7 @@ async def _explore(
                     contact,
                     graph=graph,
                     self_pubkey=self_pubkey,
+                    console=console,
                 )
                 node.last_visited = datetime.now(UTC).isoformat()
                 node.visit_failed = False
@@ -363,6 +364,7 @@ async def _login_fetch_logout(
     password: str = "",
     graph: MeshGraph | None = None,
     self_pubkey: str = "",
+    console: Console | None = None,
 ) -> list[dict[str, Any]]:
     """Login to a contact, fetch its neighbours, then logout.
 
@@ -374,39 +376,71 @@ async def _login_fetch_logout(
     Raises:
         RuntimeError: if login fails or no neighbour response is received.
     """
-    from rich.console import Console
-
-    console = Console()
+    if console is None:
+        console = Console()
     name = contact.get("adv_name", "?")
     target_pk = contact.get("public_key", "")
     _fetch_attempts = 3
     logged_in = False
+    strategy_used = None
 
     # ── Strategy 1: Graph-computed route ─────────────────────────────────────
     if graph is not None and self_pubkey:
         route = graph.find_route(self_pubkey, target_pk)
         if route is not None:
             path_hex = graph.route_to_path_hex(route)
-            console.print(
-                f"  [dim]Trying graph route via {len(route)} hop(s) "
-                f"(path={path_hex or 'direct'})…[/dim]"
-            )
+            hop_names = []
+            for pk in route:
+                node = graph.nodes.get(pk)
+                hop_names.append(node.name or pk[:8] if node else pk[:8])
+            if hop_names:
+                via = " → ".join(hop_names)
+                console.print(
+                    f"  [blue]Route[/blue] graph path via {len(route)} hop(s): {via} "
+                    f"[dim](path={path_hex})[/dim]"
+                )
+            else:
+                console.print("  [blue]Route[/blue] graph path: direct")
             await mesh.commands.change_contact_path(contact, path_hex)
             logged_in = await _try_login(mesh, contact, password, attempts=3)
+            if logged_in:
+                strategy_used = "graph"
+            else:
+                console.print("  [yellow]Route[/yellow] graph path failed")
+        else:
+            console.print("  [dim]Route: no graph path available[/dim]")
 
     # ── Strategy 2: Existing device route ────────────────────────────────────
     if not logged_in:
-        console.print("  [dim]Trying existing route…[/dim]")
+        out_path = contact.get("out_path", "")
+        out_path_len = contact.get("out_path_len", 0)
+        if out_path and out_path_len and out_path_len > 0:
+            console.print(
+                f"  [blue]Route[/blue] device path "
+                f"[dim](path={out_path[: out_path_len * 2]}, {out_path_len} hop(s))[/dim]"
+            )
+        else:
+            console.print("  [blue]Route[/blue] device path [dim](direct)[/dim]")
         logged_in = await _try_login(mesh, contact, password, attempts=2)
+        if logged_in:
+            strategy_used = "device"
+        else:
+            console.print("  [yellow]Route[/yellow] device path failed")
 
     # ── Strategy 3: Flood routing ────────────────────────────────────────────
     if not logged_in:
-        console.print("  [dim]Trying flood…[/dim]")
+        console.print("  [blue]Route[/blue] flood routing")
         await mesh.commands.reset_path(contact)
         logged_in = await _try_login(mesh, contact, password, attempts=2)
+        if logged_in:
+            strategy_used = "flood"
+        else:
+            console.print("  [yellow]Route[/yellow] flood failed")
 
     if not logged_in:
         raise RuntimeError(f"Could not log in to {name!r} after all routing strategies")
+
+    console.print(f"  [green]Route[/green] connected via [bold]{strategy_used}[/bold]")
 
     # ── Fetch phase ──────────────────────────────────────────────────────────
     result = None
