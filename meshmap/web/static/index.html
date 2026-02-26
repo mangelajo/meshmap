@@ -236,6 +236,10 @@
       cursor: pointer;
     }
     .sl-sep { color: #6e7681; }
+    input[type=range]:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
 
     /* Activity status */
     #activity {
@@ -293,6 +297,7 @@
     </div>
     <div id="btn-row">
       <button id="btn-labels" class="active" title="Toggle node labels">Labels</button>
+      <button id="btn-geo" title="Position nodes by GPS coordinates">Geo</button>
       <button id="btn-reset" title="Reset zoom to fit all nodes">Reset View</button>
     </div>
     <div class="sl-row" title="Filter nodes by BFS exploration depth">
@@ -322,6 +327,11 @@
       <span class="sl-lbl">Link length</span>
       <input type="range" id="sl-linkdist" min="30" max="2000" value="430" step="10">
       <span class="sl-val" id="lbl-linkdist">430</span>
+    </div>
+    <div class="sl-row" id="geo-radius-row" title="Max distance from anchor node for geographic positioning" style="display:none">
+      <span class="sl-lbl">Geo rad</span>
+      <input type="range" id="sl-geo-radius" min="50" max="2000" value="200" step="50">
+      <span class="sl-val" id="lbl-geo-radius">200 km</span>
     </div>
     <label class="sl-row" title="Hide nodes with no contact information (type = unknown)" style="cursor:pointer;user-select:none">
       <input type="checkbox" id="cb-hide-unknown" checked style="accent-color:#58a6ff;cursor:pointer">
@@ -365,6 +375,8 @@
   let radialStrength = 0.10;  // 0 = free force layout, 1 = strict depth rings
   let linkDistance = 430;     // preferred edge length in pixels
   let searchQuery = '';      // current search string (empty = no filter)
+  let geoMode = false;
+  let geoRadius = 200;       // km — max distance from anchor for geo-eligible nodes
 
   const width = () => window.innerWidth;
   const height = () => window.innerHeight;
@@ -693,6 +705,16 @@
     render(nodes, links);
   }
 
+  // ── Haversine distance (km) ─────────────────────────────────────────────
+  function haversineKm(lat1, lon1, lat2, lon2) {
+    const R = 6371;
+    const toRad = v => v * Math.PI / 180;
+    const dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat / 2) ** 2 +
+              Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
   // ── Full layout render (called only when structure changes) ───────────────
   function render(nodes, links) {
     // Resolve link endpoints to node objects
@@ -710,14 +732,78 @@
     simulation = d3.forceSimulation(nodes)
       .force('link', d3.forceLink(links).id(d => d.id).distance(linkDistance).strength(0.2))
       .force('charge', d3.forceManyBody().strength(chargeStrength).distanceMax(600))
-      .force('center', d3.forceCenter(width() / 2, height() / 2).strength(0.03))
       .force('collision', d3.forceCollide(40))
-      .force('radial', d3.forceRadial(
-        n => (n.depth || 0) * spreadPx,
-        width() / 2, height() / 2
-      ).strength(radialStrength))
       .alphaDecay(0.02)
       .on('tick', updatePositions);
+
+    if (geoMode) {
+      // Find anchor: depth-0 node with coords, or centroid of all geo nodes
+      const geoNodes = nodes.filter(n => n.lat != null && n.lon != null);
+      let anchorLat, anchorLon;
+      const depthZeroGeo = geoNodes.find(n => (n.depth || 0) === 0);
+      if (depthZeroGeo) {
+        anchorLat = depthZeroGeo.lat; anchorLon = depthZeroGeo.lon;
+      } else if (geoNodes.length) {
+        anchorLat = d3.mean(geoNodes, n => n.lat);
+        anchorLon = d3.mean(geoNodes, n => n.lon);
+      }
+
+      // Mark geo-eligible nodes (has coords AND within radius of anchor)
+      const geoEligible = new Set();
+      if (anchorLat != null) {
+        geoNodes.forEach(n => {
+          if (haversineKm(anchorLat, anchorLon, n.lat, n.lon) <= geoRadius) {
+            geoEligible.add(n.id);
+          }
+        });
+      }
+
+      if (geoEligible.size > 0) {
+        // Build projection fitted to eligible nodes
+        const eligible = nodes.filter(n => geoEligible.has(n.id));
+        const projection = d3.geoMercator()
+          .fitExtent(
+            [[100, 100], [width() - 100, height() - 100]],
+            { type: 'MultiPoint', coordinates: eligible.map(n => [n.lon, n.lat]) }
+          );
+
+        // Pre-compute projected positions
+        const geoPos = new Map();
+        eligible.forEach(n => {
+          const [px, py] = projection([n.lon, n.lat]);
+          geoPos.set(n.id, { x: px, y: py });
+        });
+
+        simulation
+          .force('geoX', d3.forceX(n => {
+            const p = geoPos.get(n.id);
+            return p ? p.x : width() / 2;
+          }).strength(n => geoEligible.has(n.id) ? 0.8 : 0))
+          .force('geoY', d3.forceY(n => {
+            const p = geoPos.get(n.id);
+            return p ? p.y : height() / 2;
+          }).strength(n => geoEligible.has(n.id) ? 0.8 : 0))
+          .force('center', null)
+          .force('radial', null);
+      } else {
+        // No geo-eligible nodes — fall back to centered layout without radial
+        simulation
+          .force('center', d3.forceCenter(width() / 2, height() / 2).strength(0.03))
+          .force('radial', null)
+          .force('geoX', null)
+          .force('geoY', null);
+      }
+    } else {
+      // Normal mode: radial depth rings
+      simulation
+        .force('center', d3.forceCenter(width() / 2, height() / 2).strength(0.03))
+        .force('radial', d3.forceRadial(
+          n => (n.depth || 0) * spreadPx,
+          width() / 2, height() / 2
+        ).strength(radialStrength))
+        .force('geoX', null)
+        .force('geoY', null);
+    }
 
     // Rebuild DOM selections
     linkGroupSel = gLinks.selectAll('.link-group')
@@ -845,8 +931,34 @@
       .call(zoomBehavior.transform, d3.zoomIdentity);
   });
 
+  // ── Geo mode toggle ──────────────────────────────────────────────────────
+  function updateGeoUI() {
+    document.getElementById('btn-geo').classList.toggle('active', geoMode);
+    document.getElementById('geo-radius-row').style.display = geoMode ? 'flex' : 'none';
+    // Disable spread & ring pull in geo mode
+    document.getElementById('sl-spread').disabled = geoMode;
+    document.getElementById('sl-radial').disabled = geoMode;
+    document.getElementById('sl-spread').style.opacity = geoMode ? 0.3 : 1;
+    document.getElementById('sl-radial').style.opacity = geoMode ? 0.3 : 1;
+  }
+
+  document.getElementById('btn-geo').addEventListener('click', function () {
+    geoMode = !geoMode;
+    updateGeoUI();
+    applyFilter();
+    // Auto-fit view after toggle
+    d3.select(svgEl).transition().duration(500)
+      .call(zoomBehavior.transform, d3.zoomIdentity);
+  });
+
+  document.getElementById('sl-geo-radius').addEventListener('input', function () {
+    geoRadius = +this.value;
+    document.getElementById('lbl-geo-radius').textContent = geoRadius + ' km';
+    applyFilter();
+  });
+
   window.addEventListener('resize', () => {
-    if (simulation) {
+    if (simulation && !geoMode) {
       simulation.force('center', d3.forceCenter(width() / 2, height() / 2).strength(0.05));
     }
   });
