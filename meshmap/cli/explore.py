@@ -461,22 +461,18 @@ async def _login_fetch_logout(
                 console.print(f"  [yellow]Failed[/yellow] {route_desc}")
                 _set_route_vis([])
 
-    # ── Strategy 2: Original device route ────────────────────────────────────
+    # ── Strategy 2: Original device route (only if it had a real path) ──────
     if not logged_in:
-        if tried_path_hex is not None and orig_device_path_hex == tried_path_hex:
-            console.print("  [dim]Skipping original device route (same as computed path)[/dim]")
+        if not orig_device_path_hex:
+            console.print("  [dim]Skipping device route (no cached path)[/dim]")
+        elif tried_path_hex is not None and orig_device_path_hex == tried_path_hex:
+            console.print("  [dim]Skipping device route (same as computed path)[/dim]")
         else:
-            if orig_device_path_hex:
-                route_desc = (
-                    f"original device route "
-                    f"[dim](path={orig_device_path_hex}, {orig_out_path_len} hop(s))[/dim]"
-                )
-                # Restore the original device path before trying it
-                await mesh.commands.change_contact_path(contact, orig_device_path_hex)
-            else:
-                route_desc = "original device route [dim](direct)[/dim]"
-                await mesh.commands.reset_path(contact)
-            # For device route we only know source + target (no intermediate PKs)
+            route_desc = (
+                f"original device route "
+                f"[dim](path={orig_device_path_hex}, {orig_out_path_len} hop(s))[/dim]"
+            )
+            await mesh.commands.change_contact_path(contact, orig_device_path_hex)
             _set_status(f"Connecting to {name}: cached device route")
             _set_route_vis([self_pubkey, target_pk] if self_pubkey else [])
             console.print(f"  [blue]Trying[/blue] {route_desc}")
