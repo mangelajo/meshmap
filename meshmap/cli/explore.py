@@ -403,6 +403,14 @@ async def _login_fetch_logout(
     route_desc = ""
     tried_path_hex: str | None = None  # track which path we already tried
 
+    # Snapshot the device's cached route *before* we overwrite it
+    orig_out_path = contact.get("out_path", "")
+    orig_out_path_len = contact.get("out_path_len", 0)
+    if orig_out_path and orig_out_path_len and orig_out_path_len > 0:
+        orig_device_path_hex = orig_out_path[: orig_out_path_len * 2]
+    else:
+        orig_device_path_hex = ""
+
     def _set_route_vis(node_ids: list[str]) -> None:
         """Update the graph's route visualization (visible in the web UI)."""
         if graph is not None:
@@ -434,31 +442,27 @@ async def _login_fetch_logout(
         else:
             console.print("  [dim]No computed path available[/dim]")
 
-    # ── Strategy 2: Existing device route ────────────────────────────────────
+    # ── Strategy 2: Original device route ────────────────────────────────────
     if not logged_in:
-        out_path = contact.get("out_path", "")
-        out_path_len = contact.get("out_path_len", 0)
-        if out_path and out_path_len and out_path_len > 0:
-            device_path_hex = out_path[: out_path_len * 2]
+        if tried_path_hex is not None and orig_device_path_hex == tried_path_hex:
+            console.print("  [dim]Skipping original device route (same as computed path)[/dim]")
         else:
-            device_path_hex = ""
-
-        if tried_path_hex is not None and device_path_hex == tried_path_hex:
-            console.print("  [dim]Skipping cached device route (same as computed path)[/dim]")
-        else:
-            if device_path_hex:
+            if orig_device_path_hex:
                 route_desc = (
-                    f"cached device route "
-                    f"[dim](path={device_path_hex}, {out_path_len} hop(s))[/dim]"
+                    f"original device route "
+                    f"[dim](path={orig_device_path_hex}, {orig_out_path_len} hop(s))[/dim]"
                 )
+                # Restore the original device path before trying it
+                await mesh.commands.change_contact_path(contact, orig_device_path_hex)
             else:
-                route_desc = "cached device route [dim](direct)[/dim]"
+                route_desc = "original device route [dim](direct)[/dim]"
+                await mesh.commands.reset_path(contact)
             # For device route we only know source + target (no intermediate PKs)
             _set_route_vis([self_pubkey, target_pk] if self_pubkey else [])
             console.print(f"  [blue]Trying[/blue] {route_desc}")
             logged_in = await _try_login(mesh, contact, password, attempts=2)
             if not logged_in:
-                console.print("  [yellow]Failed[/yellow] cached device route")
+                console.print("  [yellow]Failed[/yellow] original device route")
                 _set_route_vis([])
 
     # ── Strategy 3: Flood routing ────────────────────────────────────────────
