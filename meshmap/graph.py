@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import heapq
 import json
 import os
 import threading
@@ -49,6 +50,8 @@ class MeshGraph:
         self._edges: dict[tuple[str, str], GraphEdge] = {}
         self._lock = threading.Lock()
         self.currently_visiting: str | None = None  # transient; not persisted
+        self.currently_trying_route: list[str] = []  # transient; node IDs of active route attempt
+        self.status_message: str = ""  # transient; human-readable action for the web UI
 
     # ------------------------------------------------------------------
     # Persistence
@@ -209,6 +212,85 @@ class MeshGraph:
         }
 
     # ------------------------------------------------------------------
+    # Routing / pathfinding
+    # ------------------------------------------------------------------
+
+    def find_route(
+        self, source: str, target: str, *, require_bidir: bool = False
+    ) -> list[str] | None:
+        """Find shortest route between two nodes using Dijkstra's algorithm.
+
+        Returns a list of **intermediate** node pubkeys (excluding source and
+        target), or None if unreachable.
+
+        Edge cost balances hops and SNR:  cost = 1.0 + max(0, 20 - snr) / 10
+        Uses the minimum SNR of both directions (conservative).
+
+        If require_bidir is True, only edges with SNR data in BOTH directions
+        are considered (more reliable for two-way communication).
+        If False, edges with at least one direction are included.
+        Edges with no SNR data at all are always skipped.
+        """
+        if source == target:
+            return []
+        if source not in self.nodes or target not in self.nodes:
+            return None
+
+        # Build adjacency list
+        adj: dict[str, list[tuple[str, float]]] = {pk: [] for pk in self.nodes}
+        for (a, b), edge in self._edges.items():
+            has_ab = edge.snr_a_hears_b is not None
+            has_ba = edge.snr_b_hears_a is not None
+            if not has_ab and not has_ba:
+                continue  # no SNR data — treat as disconnected
+            if require_bidir and not (has_ab and has_ba):
+                continue  # skip unidirectional edges
+            snr_vals = [v for v in (edge.snr_a_hears_b, edge.snr_b_hears_a) if v is not None]
+            snr = min(snr_vals)
+            cost = 1.0 + max(0, 20 - snr) / 10
+            adj[a].append((b, cost))
+            adj[b].append((a, cost))
+
+        # Dijkstra
+        dist: dict[str, float] = {source: 0.0}
+        prev: dict[str, str | None] = {source: None}
+        heap: list[tuple[float, str]] = [(0.0, source)]
+
+        while heap:
+            d, u = heapq.heappop(heap)
+            if u == target:
+                break
+            if d > dist.get(u, float("inf")):
+                continue
+            for v, w in adj.get(u, []):
+                nd = d + w
+                if nd < dist.get(v, float("inf")):
+                    dist[v] = nd
+                    prev[v] = u
+                    heapq.heappush(heap, (nd, v))
+
+        if target not in prev:
+            return None
+
+        # Reconstruct path and return intermediates only
+        path: list[str] = []
+        cur: str | None = target
+        while cur is not None:
+            path.append(cur)
+            cur = prev.get(cur)
+        path.reverse()
+        # path = [source, ..., target] — return intermediates
+        return path[1:-1]
+
+    def route_to_path_hex(self, route: list[str]) -> str:
+        """Encode a route (list of intermediate pubkeys) as a hex path string.
+
+        Each hop is represented by the first byte of its pubkey.
+        E.g. ["ab12...", "cd34..."] → "abcd"
+        """
+        return "".join(pk[:2] for pk in route)
+
+    # ------------------------------------------------------------------
     # Serialisation for D3
     # ------------------------------------------------------------------
 
@@ -239,4 +321,10 @@ class MeshGraph:
                 }
                 for e in self._edges.values()
             ]
-        return {"nodes": nodes, "links": links, "currently_visiting": self.currently_visiting}
+        return {
+            "nodes": nodes,
+            "links": links,
+            "currently_visiting": self.currently_visiting,
+            "currently_trying_route": self.currently_trying_route,
+            "status_message": self.status_message,
+        }

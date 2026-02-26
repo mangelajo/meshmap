@@ -166,10 +166,24 @@ async def _explore(
         await mesh.ensure_contacts()
 
         # ── Discover 0-hop repeaters ─────────────────────────────────────────
+        graph.status_message = f"Discovering 0-hop repeaters ({wait_time:.0f}s)…"
         console.print(f"[dim]Discovering 0-hop repeaters ({wait_time:.0f}s)…[/dim]")
         scanner = MeshScanner(serial_port, baudrate=baudrate, debug=debug)
         scanner.mesh = mesh  # reuse existing connection
         repeaters = await scanner.discover_zero_hop_repeaters(wait_time=int(wait_time))
+
+        # Add the scanner itself as a node so pathfinding can route from it
+        self_info = mesh.self_info or {}
+        self_pubkey = self_info.get("public_key", "")
+        if self_pubkey:
+            graph.upsert_node(
+                self_pubkey,
+                self_info.get("adv_name", "self"),
+                "node",
+                self_info.get("adv_lat"),
+                self_info.get("adv_lon"),
+                depth=0,
+            )
 
         for r in repeaters:
             canonical_pk = _resolve_pubkey(r["public_key"], mesh.contacts)
@@ -181,6 +195,11 @@ async def _explore(
                 r.get("lon"),
                 depth=0,
             )
+            # Create edge from scanner to 0-hop repeater so pathfinding works
+            snr = r.get("snr")
+            if self_pubkey and snr is not None:
+                graph.upsert_edge(listener=self_pubkey, talker=canonical_pk, snr=snr)
+
         console.print(f"[dim]Found {len(repeaters)} 0-hop repeater(s).[/dim]")
         graph.save(output_path)
 
@@ -188,6 +207,7 @@ async def _explore(
         while True:
             pending = graph.next_repeaters_to_visit(refresh=refresh, retry=retry)
             if not pending:
+                graph.status_message = "Exploration complete"
                 console.print("[green]Exploration complete — no more nodes to visit.[/green]")
                 break
 
@@ -202,9 +222,10 @@ async def _explore(
                 console.print(f"[dim]Skipping {label} — depth {node.depth} ≥ {max_depth}[/dim]")
                 continue
 
+            remaining = graph.stats["pending"]
+            graph.status_message = f"Visiting {label} (depth {node.depth}, {remaining} remaining)"
             console.print(
-                f"Visiting [cyan]{label}[/cyan] "
-                f"(depth {node.depth}, {graph.stats['pending']} remaining)…"
+                f"Visiting [cyan]{label}[/cyan] (depth {node.depth}, {remaining} remaining)…"
             )
 
             # Find the contact in the local contact list
@@ -215,9 +236,16 @@ async def _explore(
                 graph.save(output_path)
                 continue
 
+            self_pubkey = mesh.self_info.get("public_key", "") if mesh.self_info else ""
             graph.currently_visiting = node.public_key
             try:
-                neighbours = await _login_fetch_logout(mesh, contact)
+                neighbours = await _login_fetch_logout(
+                    mesh,
+                    contact,
+                    graph=graph,
+                    self_pubkey=self_pubkey,
+                    console=console,
+                )
                 node.last_visited = datetime.now(UTC).isoformat()
                 node.visit_failed = False
 
@@ -266,9 +294,11 @@ async def _explore(
                 graph.save(output_path)
             finally:
                 graph.currently_visiting = None
+                graph.currently_trying_route = []
 
     except KeyboardInterrupt:
         console.print("\n[yellow]Interrupted — saving graph…[/yellow]")
+        graph.status_message = "Interrupted"
         graph.save(output_path)
     finally:
         if sniffer is not None:
@@ -315,29 +345,21 @@ def _find_contact_by_pubkey(pubkey: str, contacts: dict[str, Any]) -> dict[str, 
     return None
 
 
-async def _login_fetch_logout(
+async def _try_login(
     mesh: Any,
     contact: dict[str, Any],
-    password: str = "",
-) -> list[dict[str, Any]]:
-    """Login to a contact, fetch its neighbours, then logout.
+    password: str,
+    attempts: int,
+) -> bool:
+    """Attempt to log in to a contact. Returns True on success, False on timeout.
 
-    Mirrors the logic in meshmap.neighbours.get_neighbours but reuses an
-    existing mesh connection instead of creating a new one.
-
-    Raises:
-        RuntimeError: if login fails or no neighbour response is received.
+    Raises RuntimeError if the login is explicitly rejected.
     """
     name = contact.get("adv_name", "?")
-    _login_attempts = 3
-    _fetch_attempts = 3
-
-    # ── Login phase ──────────────────────────────────────────────────────────
-    logged_in = False
-    for attempt in range(1, _login_attempts + 1):
+    for attempt in range(1, attempts + 1):
         login_event = await mesh.commands.send_login(contact, password)
         if login_event and login_event.type == EventType.ERROR:
-            if attempt < _login_attempts:
+            if attempt < attempts:
                 await asyncio.sleep(2)
             continue
 
@@ -352,15 +374,132 @@ async def _login_fetch_logout(
         if t_fail in done and t_fail.result() is not None:
             raise RuntimeError(f"Login rejected by {name!r}")
         if t_ok in done and t_ok.result() is not None:
-            logged_in = True
-            break
-        if attempt < _login_attempts:
+            return True
+        if attempt < attempts:
             await asyncio.sleep(2)
 
+    return False
+
+
+async def _login_fetch_logout(
+    mesh: Any,
+    contact: dict[str, Any],
+    password: str = "",
+    graph: MeshGraph | None = None,
+    self_pubkey: str = "",
+    console: Console | None = None,
+) -> list[dict[str, Any]]:
+    """Login to a contact, fetch its neighbours, then logout.
+
+    Uses a retry cascade with progressively broader routing strategies:
+      1. Graph-computed route via change_contact_path (up to 3 attempts)
+      2. Existing device route (up to 2 attempts)
+      3. Flood routing via reset_path (up to 2 attempts)
+
+    Raises:
+        RuntimeError: if login fails or no neighbour response is received.
+    """
+    if console is None:
+        console = Console()
+    name = contact.get("adv_name", "?")
+    target_pk = contact.get("public_key", "")
+    _fetch_attempts = 3
+    logged_in = False
+    route_desc = ""
+    tried_path_hex: str | None = None  # track which path we already tried
+
+    # Snapshot the device's cached route *before* we overwrite it
+    orig_out_path = contact.get("out_path", "")
+    orig_out_path_len = contact.get("out_path_len", 0)
+    if orig_out_path and orig_out_path_len and orig_out_path_len > 0:
+        orig_device_path_hex = orig_out_path[: orig_out_path_len * 2]
+    else:
+        orig_device_path_hex = ""
+
+    def _set_route_vis(node_ids: list[str]) -> None:
+        """Update the graph's route visualization (visible in the web UI)."""
+        if graph is not None:
+            graph.currently_trying_route = node_ids
+
+    def _set_status(msg: str) -> None:
+        """Update the graph's status message (visible in the web UI)."""
+        if graph is not None:
+            graph.status_message = msg
+
+    # ── Strategy 1: Graph-computed route (bidir first, then any) ────────────
+    if graph is not None and self_pubkey:
+        tried_paths: list[str] = []
+        for bidir_pass, label in [(True, "bidirectional"), (False, "any-direction")]:
+            if logged_in:
+                break
+            route = graph.find_route(self_pubkey, target_pk, require_bidir=bidir_pass)
+            if route is None:
+                console.print(f"  [dim]No {label} computed path available[/dim]")
+                continue
+            path_hex = graph.route_to_path_hex(route)
+            if path_hex in tried_paths:
+                console.print(f"  [dim]Skipping {label} path (same as already tried)[/dim]")
+                continue
+            tried_paths.append(path_hex)
+            tried_path_hex = path_hex
+            hop_names = []
+            for pk in route:
+                node = graph.nodes.get(pk)
+                hop_names.append(node.name or pk[:8] if node else pk[:8])
+            if hop_names:
+                via = " → ".join(hop_names)
+                route_desc = f"{label} path via {via}"
+                console.print(f"  [blue]Trying[/blue] {route_desc} [dim](path={path_hex})[/dim]")
+            else:
+                route_desc = f"{label} direct path"
+                console.print(f"  [blue]Trying[/blue] {route_desc}")
+            _set_status(f"Connecting to {name}: {route_desc}")
+            _set_route_vis([self_pubkey, *route, target_pk])
+            await mesh.commands.change_contact_path(contact, path_hex)
+            logged_in = await _try_login(mesh, contact, password, attempts=3)
+            if not logged_in:
+                console.print(f"  [yellow]Failed[/yellow] {route_desc}")
+                _set_route_vis([])
+
+    # ── Strategy 2: Original device route (only if it had a real path) ──────
     if not logged_in:
-        raise RuntimeError(f"Could not log in to {name!r} after {_login_attempts} attempt(s)")
+        if not orig_device_path_hex:
+            console.print("  [dim]Skipping device route (no cached path)[/dim]")
+        elif tried_path_hex is not None and orig_device_path_hex == tried_path_hex:
+            console.print("  [dim]Skipping device route (same as computed path)[/dim]")
+        else:
+            route_desc = (
+                f"original device route "
+                f"[dim](path={orig_device_path_hex}, {orig_out_path_len} hop(s))[/dim]"
+            )
+            await mesh.commands.change_contact_path(contact, orig_device_path_hex)
+            _set_status(f"Connecting to {name}: cached device route")
+            _set_route_vis([self_pubkey, target_pk] if self_pubkey else [])
+            console.print(f"  [blue]Trying[/blue] {route_desc}")
+            logged_in = await _try_login(mesh, contact, password, attempts=2)
+            if not logged_in:
+                console.print("  [yellow]Failed[/yellow] original device route")
+                _set_route_vis([])
+
+    # ── Strategy 3: Flood routing ────────────────────────────────────────────
+    if not logged_in:
+        route_desc = "flood routing"
+        console.print(f"  [blue]Trying[/blue] {route_desc}")
+        _set_status(f"Connecting to {name}: flood routing")
+        _set_route_vis([])  # flood has no specific path to show
+        await mesh.commands.reset_path(contact)
+        logged_in = await _try_login(mesh, contact, password, attempts=2)
+        if not logged_in:
+            console.print(f"  [yellow]Failed[/yellow] {route_desc}")
+
+    if not logged_in:
+        _set_status(f"Failed to connect to {name}")
+        _set_route_vis([])
+        raise RuntimeError(f"Could not log in to {name!r} after all routing strategies")
 
     # ── Fetch phase ──────────────────────────────────────────────────────────
+    _set_status(f"Fetching neighbours from {name}…")
+    _set_route_vis([])
     result = None
     try:
         for attempt in range(1, _fetch_attempts + 1):
@@ -371,6 +510,8 @@ async def _login_fetch_logout(
                 await asyncio.sleep(2)
     finally:
         await mesh.commands.send_logout(contact)
+
+    _set_status("")
 
     if result is None:
         raise RuntimeError(f"No neighbour response from {name!r}")
