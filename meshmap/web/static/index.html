@@ -840,10 +840,27 @@
       .text(d => showLabels ? (d.name || d.id.substring(0, 8) + '…') : '');
   });
 
-  document.getElementById('btn-reset').addEventListener('click', () => {
+  function fitAll() {
+    const nodes = simulation ? simulation.nodes() : [];
+    if (nodes.length === 0) return;
+    const pad = 40;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const d of nodes) {
+      if (d.x < x0) x0 = d.x;
+      if (d.y < y0) y0 = d.y;
+      if (d.x > x1) x1 = d.x;
+      if (d.y > y1) y1 = d.y;
+    }
+    const w = width(), h = height();
+    const bw = x1 - x0 || 1, bh = y1 - y0 || 1;
+    const scale = Math.min(5, (w - 2 * pad) / bw, (h - 2 * pad) / bh);
+    const tx = w / 2 - scale * (x0 + bw / 2);
+    const ty = h / 2 - scale * (y0 + bh / 2);
     d3.select(svgEl).transition().duration(500)
-      .call(zoomBehavior.transform, d3.zoomIdentity);
-  });
+      .call(zoomBehavior.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
+  }
+
+  document.getElementById('btn-reset').addEventListener('click', fitAll);
 
   window.addEventListener('resize', () => {
     if (simulation) {
