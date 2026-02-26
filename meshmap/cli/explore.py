@@ -171,6 +171,19 @@ async def _explore(
         scanner.mesh = mesh  # reuse existing connection
         repeaters = await scanner.discover_zero_hop_repeaters(wait_time=int(wait_time))
 
+        # Add the scanner itself as a node so pathfinding can route from it
+        self_info = mesh.self_info or {}
+        self_pubkey = self_info.get("public_key", "")
+        if self_pubkey:
+            graph.upsert_node(
+                self_pubkey,
+                self_info.get("adv_name", "self"),
+                "node",
+                self_info.get("adv_lat"),
+                self_info.get("adv_lon"),
+                depth=0,
+            )
+
         for r in repeaters:
             canonical_pk = _resolve_pubkey(r["public_key"], mesh.contacts)
             graph.upsert_node(
@@ -181,6 +194,11 @@ async def _explore(
                 r.get("lon"),
                 depth=0,
             )
+            # Create edge from scanner to 0-hop repeater so pathfinding works
+            snr = r.get("snr")
+            if self_pubkey and snr is not None:
+                graph.upsert_edge(listener=self_pubkey, talker=canonical_pk, snr=snr)
+
         console.print(f"[dim]Found {len(repeaters)} 0-hop repeater(s).[/dim]")
         graph.save(output_path)
 
