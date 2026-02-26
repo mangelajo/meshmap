@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import heapq
 import json
 import os
 import threading
@@ -207,6 +208,77 @@ class MeshGraph:
             "pending": pending,
             "failed": failed,
         }
+
+    # ------------------------------------------------------------------
+    # Routing / pathfinding
+    # ------------------------------------------------------------------
+
+    def find_route(self, source: str, target: str) -> list[str] | None:
+        """Find shortest route between two nodes using Dijkstra's algorithm.
+
+        Returns a list of **intermediate** node pubkeys (excluding source and
+        target), or None if unreachable.
+
+        Edge cost balances hops and SNR:  cost = 1.0 + max(0, 20 - snr) / 10
+        Uses the minimum SNR of both directions (conservative).
+        Edges with no SNR data at all are skipped (treated as disconnected).
+        """
+        if source == target:
+            return []
+        if source not in self.nodes or target not in self.nodes:
+            return None
+
+        # Build adjacency list
+        adj: dict[str, list[tuple[str, float]]] = {pk: [] for pk in self.nodes}
+        for (a, b), edge in self._edges.items():
+            snr_vals = [
+                v for v in (edge.snr_a_hears_b, edge.snr_b_hears_a) if v is not None
+            ]
+            if not snr_vals:
+                continue  # no SNR data — treat as disconnected
+            snr = min(snr_vals)
+            cost = 1.0 + max(0, 20 - snr) / 10
+            adj[a].append((b, cost))
+            adj[b].append((a, cost))
+
+        # Dijkstra
+        dist: dict[str, float] = {source: 0.0}
+        prev: dict[str, str | None] = {source: None}
+        heap: list[tuple[float, str]] = [(0.0, source)]
+
+        while heap:
+            d, u = heapq.heappop(heap)
+            if u == target:
+                break
+            if d > dist.get(u, float("inf")):
+                continue
+            for v, w in adj.get(u, []):
+                nd = d + w
+                if nd < dist.get(v, float("inf")):
+                    dist[v] = nd
+                    prev[v] = u
+                    heapq.heappush(heap, (nd, v))
+
+        if target not in prev:
+            return None
+
+        # Reconstruct path and return intermediates only
+        path: list[str] = []
+        cur: str | None = target
+        while cur is not None:
+            path.append(cur)
+            cur = prev.get(cur)
+        path.reverse()
+        # path = [source, ..., target] — return intermediates
+        return path[1:-1]
+
+    def route_to_path_hex(self, route: list[str]) -> str:
+        """Encode a route (list of intermediate pubkeys) as a hex path string.
+
+        Each hop is represented by the first byte of its pubkey.
+        E.g. ["ab12...", "cd34..."] → "abcd"
+        """
+        return "".join(pk[:2] for pk in route)
 
     # ------------------------------------------------------------------
     # Serialisation for D3

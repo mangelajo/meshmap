@@ -215,9 +215,12 @@ async def _explore(
                 graph.save(output_path)
                 continue
 
+            self_pubkey = mesh.self_info.get("public_key", "") if mesh.self_info else ""
             graph.currently_visiting = node.public_key
             try:
-                neighbours = await _login_fetch_logout(mesh, contact)
+                neighbours = await _login_fetch_logout(
+                    mesh, contact, graph=graph, self_pubkey=self_pubkey,
+                )
                 node.last_visited = datetime.now(UTC).isoformat()
                 node.visit_failed = False
 
@@ -315,29 +318,21 @@ def _find_contact_by_pubkey(pubkey: str, contacts: dict[str, Any]) -> dict[str, 
     return None
 
 
-async def _login_fetch_logout(
+async def _try_login(
     mesh: Any,
     contact: dict[str, Any],
-    password: str = "",
-) -> list[dict[str, Any]]:
-    """Login to a contact, fetch its neighbours, then logout.
+    password: str,
+    attempts: int,
+) -> bool:
+    """Attempt to log in to a contact. Returns True on success, False on timeout.
 
-    Mirrors the logic in meshmap.neighbours.get_neighbours but reuses an
-    existing mesh connection instead of creating a new one.
-
-    Raises:
-        RuntimeError: if login fails or no neighbour response is received.
+    Raises RuntimeError if the login is explicitly rejected.
     """
     name = contact.get("adv_name", "?")
-    _login_attempts = 3
-    _fetch_attempts = 3
-
-    # ── Login phase ──────────────────────────────────────────────────────────
-    logged_in = False
-    for attempt in range(1, _login_attempts + 1):
+    for attempt in range(1, attempts + 1):
         login_event = await mesh.commands.send_login(contact, password)
         if login_event and login_event.type == EventType.ERROR:
-            if attempt < _login_attempts:
+            if attempt < attempts:
                 await asyncio.sleep(2)
             continue
 
@@ -352,13 +347,61 @@ async def _login_fetch_logout(
         if t_fail in done and t_fail.result() is not None:
             raise RuntimeError(f"Login rejected by {name!r}")
         if t_ok in done and t_ok.result() is not None:
-            logged_in = True
-            break
-        if attempt < _login_attempts:
+            return True
+        if attempt < attempts:
             await asyncio.sleep(2)
 
+    return False
+
+
+async def _login_fetch_logout(
+    mesh: Any,
+    contact: dict[str, Any],
+    password: str = "",
+    graph: MeshGraph | None = None,
+    self_pubkey: str = "",
+) -> list[dict[str, Any]]:
+    """Login to a contact, fetch its neighbours, then logout.
+
+    Uses a retry cascade with progressively broader routing strategies:
+      1. Existing device route (up to 3 login attempts)
+      2. Graph-computed route via change_contact_path (up to 2 attempts)
+      3. Flood routing via reset_path (up to 2 attempts)
+
+    Raises:
+        RuntimeError: if login fails or no neighbour response is received.
+    """
+    from rich.console import Console
+
+    console = Console()
+    name = contact.get("adv_name", "?")
+    target_pk = contact.get("public_key", "")
+    _fetch_attempts = 3
+
+    # ── Strategy 1: Existing device route ────────────────────────────────────
+    console.print("  [dim]Trying existing route…[/dim]")
+    logged_in = await _try_login(mesh, contact, password, attempts=3)
+
+    # ── Strategy 2: Graph-computed route ─────────────────────────────────────
+    if not logged_in and graph is not None and self_pubkey:
+        route = graph.find_route(self_pubkey, target_pk)
+        if route is not None:
+            path_hex = graph.route_to_path_hex(route)
+            console.print(
+                f"  [dim]Trying graph route via {len(route)} hop(s) "
+                f"(path={path_hex or 'direct'})…[/dim]"
+            )
+            await mesh.commands.change_contact_path(contact, path_hex)
+            logged_in = await _try_login(mesh, contact, password, attempts=2)
+
+    # ── Strategy 3: Flood routing ────────────────────────────────────────────
     if not logged_in:
-        raise RuntimeError(f"Could not log in to {name!r} after {_login_attempts} attempt(s)")
+        console.print("  [dim]Trying flood…[/dim]")
+        await mesh.commands.reset_path(contact)
+        logged_in = await _try_login(mesh, contact, password, attempts=2)
+
+    if not logged_in:
+        raise RuntimeError(f"Could not log in to {name!r} after all routing strategies")
 
     # ── Fetch phase ──────────────────────────────────────────────────────────
     result = None
