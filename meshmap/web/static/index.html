@@ -236,6 +236,26 @@
       cursor: pointer;
     }
     .sl-sep { color: #6e7681; }
+
+    /* Activity status */
+    #activity {
+      position: fixed;
+      bottom: 12px;
+      right: 12px;
+      background: rgba(13, 17, 23, 0.88);
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 8px 14px;
+      font-size: 12px;
+      color: #58a6ff;
+      backdrop-filter: blur(4px);
+      max-width: 400px;
+      transition: opacity 0.3s ease;
+    }
+    #activity:empty, #activity:has(#s-status:empty) {
+      opacity: 0;
+      pointer-events: none;
+    }
   </style>
 </head>
 <body>
@@ -256,7 +276,6 @@
     <div class="stat">Visited: <span id="s-visited">0</span></div>
     <div class="stat">Pending: <span id="s-pending">0</span></div>
     <div class="stat">Failed: <span id="s-failed">0</span></div>
-    <div id="s-status" style="margin-top:6px;color:#58a6ff;font-size:11px;min-height:1.4em"></div>
   </div>
 
   <div id="legend">
@@ -315,6 +334,10 @@
   </div>
 
   <div id="tooltip"></div>
+
+  <div id="activity">
+    <span id="s-status"></span>
+  </div>
 
   <script>
   'use strict';
