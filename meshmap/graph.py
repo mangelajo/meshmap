@@ -214,7 +214,9 @@ class MeshGraph:
     # Routing / pathfinding
     # ------------------------------------------------------------------
 
-    def find_route(self, source: str, target: str) -> list[str] | None:
+    def find_route(
+        self, source: str, target: str, *, require_bidir: bool = False
+    ) -> list[str] | None:
         """Find shortest route between two nodes using Dijkstra's algorithm.
 
         Returns a list of **intermediate** node pubkeys (excluding source and
@@ -222,7 +224,11 @@ class MeshGraph:
 
         Edge cost balances hops and SNR:  cost = 1.0 + max(0, 20 - snr) / 10
         Uses the minimum SNR of both directions (conservative).
-        Edges with no SNR data at all are skipped (treated as disconnected).
+
+        If require_bidir is True, only edges with SNR data in BOTH directions
+        are considered (more reliable for two-way communication).
+        If False, edges with at least one direction are included.
+        Edges with no SNR data at all are always skipped.
         """
         if source == target:
             return []
@@ -232,9 +238,13 @@ class MeshGraph:
         # Build adjacency list
         adj: dict[str, list[tuple[str, float]]] = {pk: [] for pk in self.nodes}
         for (a, b), edge in self._edges.items():
-            snr_vals = [v for v in (edge.snr_a_hears_b, edge.snr_b_hears_a) if v is not None]
-            if not snr_vals:
+            has_ab = edge.snr_a_hears_b is not None
+            has_ba = edge.snr_b_hears_a is not None
+            if not has_ab and not has_ba:
                 continue  # no SNR data — treat as disconnected
+            if require_bidir and not (has_ab and has_ba):
+                continue  # skip unidirectional edges
+            snr_vals = [v for v in (edge.snr_a_hears_b, edge.snr_b_hears_a) if v is not None]
             snr = min(snr_vals)
             cost = 1.0 + max(0, 20 - snr) / 10
             adj[a].append((b, cost))

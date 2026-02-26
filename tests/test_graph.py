@@ -143,6 +143,58 @@ class TestFindRoute:
 
 
 # ---------------------------------------------------------------------------
+# find_route with require_bidir
+# ---------------------------------------------------------------------------
+
+
+class TestFindRouteBidir:
+    def test_bidir_skips_unidirectional_edges(self):
+        """Bidirectional mode should not use edges with only one SNR direction."""
+        g = MeshGraph()
+        g.upsert_node("aaa", "A", "repeater", None, None)
+        g.upsert_node("bbb", "B", "repeater", None, None)
+        g.upsert_edge(listener="aaa", talker="bbb", snr=10.0)
+        # Only one direction — bidir should fail
+        assert g.find_route("aaa", "bbb", require_bidir=True) is None
+        # Non-bidir should succeed
+        assert g.find_route("aaa", "bbb", require_bidir=False) == []
+
+    def test_bidir_uses_bidirectional_edges(self):
+        """Bidirectional mode should use edges with both SNR directions."""
+        g = _make_graph(
+            ("aaa", "bbb", 15.0, 14.0),
+            ("bbb", "ccc", 12.0, 10.0),
+        )
+        assert g.find_route("aaa", "ccc", require_bidir=True) == ["bbb"]
+
+    def test_bidir_routes_around_unidir_link(self):
+        """When a direct link is unidirectional, bidir should route around it."""
+        g = _make_graph(
+            ("aaa", "bbb", 15.0, 14.0),  # bidir
+            ("bbb", "ccc", 12.0, 10.0),  # bidir
+        )
+        # Add a direct A→C link but unidirectional
+        g.upsert_edge(listener="aaa", talker="ccc", snr=20.0)
+        # bidir: must go via bbb
+        assert g.find_route("aaa", "ccc", require_bidir=True) == ["bbb"]
+        # any-direction: direct is cheaper
+        assert g.find_route("aaa", "ccc", require_bidir=False) == []
+
+    def test_bidir_unreachable_but_unidir_reachable(self):
+        """No bidir path exists, but a unidir one does."""
+        g = MeshGraph()
+        g.upsert_node("aaa", "A", "repeater", None, None)
+        g.upsert_node("bbb", "B", "repeater", None, None)
+        g.upsert_node("ccc", "C", "repeater", None, None)
+        # A-B: only A heard B
+        g.upsert_edge(listener="aaa", talker="bbb", snr=10.0)
+        # B-C: only B heard C
+        g.upsert_edge(listener="bbb", talker="ccc", snr=10.0)
+        assert g.find_route("aaa", "ccc", require_bidir=True) is None
+        assert g.find_route("aaa", "ccc", require_bidir=False) == ["bbb"]
+
+
+# ---------------------------------------------------------------------------
 # route_to_path_hex
 # ---------------------------------------------------------------------------
 

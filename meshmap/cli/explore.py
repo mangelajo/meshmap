@@ -416,11 +416,21 @@ async def _login_fetch_logout(
         if graph is not None:
             graph.currently_trying_route = node_ids
 
-    # ── Strategy 1: Graph-computed route ─────────────────────────────────────
+    # ── Strategy 1: Graph-computed route (bidir first, then any) ────────────
     if graph is not None and self_pubkey:
-        route = graph.find_route(self_pubkey, target_pk)
-        if route is not None:
+        tried_paths: list[str] = []
+        for bidir_pass, label in [(True, "bidirectional"), (False, "any-direction")]:
+            if logged_in:
+                break
+            route = graph.find_route(self_pubkey, target_pk, require_bidir=bidir_pass)
+            if route is None:
+                console.print(f"  [dim]No {label} computed path available[/dim]")
+                continue
             path_hex = graph.route_to_path_hex(route)
+            if path_hex in tried_paths:
+                console.print(f"  [dim]Skipping {label} path (same as already tried)[/dim]")
+                continue
+            tried_paths.append(path_hex)
             tried_path_hex = path_hex
             hop_names = []
             for pk in route:
@@ -428,10 +438,10 @@ async def _login_fetch_logout(
                 hop_names.append(node.name or pk[:8] if node else pk[:8])
             if hop_names:
                 via = " → ".join(hop_names)
-                route_desc = f"computed path via {via}"
+                route_desc = f"{label} path via {via}"
                 console.print(f"  [blue]Trying[/blue] {route_desc} [dim](path={path_hex})[/dim]")
             else:
-                route_desc = "computed direct path"
+                route_desc = f"{label} direct path"
                 console.print(f"  [blue]Trying[/blue] {route_desc}")
             _set_route_vis([self_pubkey, *route, target_pk])
             await mesh.commands.change_contact_path(contact, path_hex)
@@ -439,8 +449,6 @@ async def _login_fetch_logout(
             if not logged_in:
                 console.print(f"  [yellow]Failed[/yellow] {route_desc}")
                 _set_route_vis([])
-        else:
-            console.print("  [dim]No computed path available[/dim]")
 
     # ── Strategy 2: Original device route ────────────────────────────────────
     if not logged_in:
