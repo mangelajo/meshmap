@@ -219,7 +219,10 @@ async def _explore(
             graph.currently_visiting = node.public_key
             try:
                 neighbours = await _login_fetch_logout(
-                    mesh, contact, graph=graph, self_pubkey=self_pubkey,
+                    mesh,
+                    contact,
+                    graph=graph,
+                    self_pubkey=self_pubkey,
                 )
                 node.last_visited = datetime.now(UTC).isoformat()
                 node.visit_failed = False
@@ -364,8 +367,8 @@ async def _login_fetch_logout(
     """Login to a contact, fetch its neighbours, then logout.
 
     Uses a retry cascade with progressively broader routing strategies:
-      1. Existing device route (up to 3 login attempts)
-      2. Graph-computed route via change_contact_path (up to 2 attempts)
+      1. Graph-computed route via change_contact_path (up to 3 attempts)
+      2. Existing device route (up to 2 attempts)
       3. Flood routing via reset_path (up to 2 attempts)
 
     Raises:
@@ -377,13 +380,10 @@ async def _login_fetch_logout(
     name = contact.get("adv_name", "?")
     target_pk = contact.get("public_key", "")
     _fetch_attempts = 3
+    logged_in = False
 
-    # ── Strategy 1: Existing device route ────────────────────────────────────
-    console.print("  [dim]Trying existing route…[/dim]")
-    logged_in = await _try_login(mesh, contact, password, attempts=3)
-
-    # ── Strategy 2: Graph-computed route ─────────────────────────────────────
-    if not logged_in and graph is not None and self_pubkey:
+    # ── Strategy 1: Graph-computed route ─────────────────────────────────────
+    if graph is not None and self_pubkey:
         route = graph.find_route(self_pubkey, target_pk)
         if route is not None:
             path_hex = graph.route_to_path_hex(route)
@@ -392,7 +392,12 @@ async def _login_fetch_logout(
                 f"(path={path_hex or 'direct'})…[/dim]"
             )
             await mesh.commands.change_contact_path(contact, path_hex)
-            logged_in = await _try_login(mesh, contact, password, attempts=2)
+            logged_in = await _try_login(mesh, contact, password, attempts=3)
+
+    # ── Strategy 2: Existing device route ────────────────────────────────────
+    if not logged_in:
+        console.print("  [dim]Trying existing route…[/dim]")
+        logged_in = await _try_login(mesh, contact, password, attempts=2)
 
     # ── Strategy 3: Flood routing ────────────────────────────────────────────
     if not logged_in:

@@ -231,9 +231,7 @@ class MeshGraph:
         # Build adjacency list
         adj: dict[str, list[tuple[str, float]]] = {pk: [] for pk in self.nodes}
         for (a, b), edge in self._edges.items():
-            snr_vals = [
-                v for v in (edge.snr_a_hears_b, edge.snr_b_hears_a) if v is not None
-            ]
+            snr_vals = [v for v in (edge.snr_a_hears_b, edge.snr_b_hears_a) if v is not None]
             if not snr_vals:
                 continue  # no SNR data — treat as disconnected
             snr = min(snr_vals)
