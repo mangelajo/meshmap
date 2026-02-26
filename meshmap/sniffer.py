@@ -16,15 +16,17 @@ from meshmap.models import snr_color
 class PacketSniffer:
     """Sniff and decode RF packets from meshcore networks."""
 
-    def __init__(self, mesh: meshcore.MeshCore, debug: bool = False):
+    def __init__(self, mesh: meshcore.MeshCore, debug: bool = False, graph: object | None = None):
         """Initialize the packet sniffer.
 
         Args:
             mesh: MeshCore instance to sniff packets from
             debug: Enable debug output (default: False)
+            graph: Optional MeshGraph instance for updating nodes from ADVERT packets
         """
         self.mesh = mesh
         self.debug = debug
+        self.graph = graph
         self.console = Console()
         self._subscription: Any = None
         self._packet_count: int = 0
@@ -300,6 +302,22 @@ class PacketSniffer:
                     if decoded.dest_name:
                         dest_display += f" [green]{decoded.dest_name}[/green]"
                     output.append(f"[dim]To:[/dim]   {dest_display}")
+
+            # Learn names from ADVERT packets
+            if decoded.advert_pubkey and decoded.advert_name:
+                key = decoded.advert_pubkey[:8].lower()
+                if key not in contact_map:
+                    contact_map[key] = decoded.advert_name
+
+            # Update graph from ADVERT packets when graph is available
+            if self.graph and decoded.advert_pubkey and decoded.advert_name:
+                self.graph.upsert_node(
+                    decoded.advert_pubkey,
+                    decoded.advert_name,
+                    decoded.advert_type.lower() if decoded.advert_type else "unknown",
+                    decoded.advert_lat,
+                    decoded.advert_lon,
+                )
 
             # Show ADVERT details
             if decoded.advert_pubkey:

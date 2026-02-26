@@ -159,7 +159,7 @@ async def _explore(
     if sniff_active:
         from meshmap.sniffer import PacketSniffer
 
-        sniffer = PacketSniffer(mesh, debug=debug)
+        sniffer = PacketSniffer(mesh, debug=debug, graph=graph)
         await sniffer.attach(sniff_keys or [], None)
 
     try:
