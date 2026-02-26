@@ -318,6 +318,11 @@
       <input type="range" id="sl-radial" min="0" max="100" value="10" step="5">
       <span class="sl-val" id="lbl-radial">0.10</span>
     </div>
+    <div class="sl-row" title="Scale node size by number of connections">
+      <span class="sl-lbl">Node size</span>
+      <input type="range" id="sl-size" min="0" max="100" value="50" step="5">
+      <span class="sl-val" id="lbl-size">0.50</span>
+    </div>
     <div class="sl-row" title="Preferred distance between directly connected nodes">
       <span class="sl-lbl">Link length</span>
       <input type="range" id="sl-linkdist" min="30" max="2000" value="430" step="10">
@@ -365,6 +370,7 @@
   let radialStrength = 0.10;  // 0 = free force layout, 1 = strict depth rings
   let linkDistance = 430;     // preferred edge length in pixels
   let searchQuery = '';      // current search string (empty = no filter)
+  let sizeFactor = 0.5;      // 0 = uniform, 1 = fully degree-proportional
 
   const width = () => window.innerWidth;
   const height = () => window.innerHeight;
@@ -451,7 +457,11 @@
     return '#6e7681';
   }
 
-  function nodeRadius(d) { return d.type === 'repeater' ? 10 : 7; }
+  function nodeRadius(d) {
+    const base = d.type === 'repeater' ? 10 : 7;
+    const degree = d.degree || 0;
+    return Math.min(30, base + degree * 2 * sizeFactor);
+  }
 
   function linkColor(snr) {
     if (snr == null) return '#555';
@@ -702,6 +712,15 @@
       if (typeof l.target !== 'object') l.target = nodeById.get(l.target) || { id: l.target, x: 0, y: 0 };
     });
 
+    // Precompute degree (connection count) for each node
+    nodes.forEach(n => { n.degree = 0; });
+    links.forEach(l => {
+      const s = typeof l.source === 'object' ? l.source : nodeById.get(l.source);
+      const t = typeof l.target === 'object' ? l.target : nodeById.get(l.target);
+      if (s) s.degree = (s.degree || 0) + 1;
+      if (t) t.degree = (t.degree || 0) + 1;
+    });
+
     // Stop any running simulation
     if (simulation) { simulation.stop(); simulation = null; }
 
@@ -711,7 +730,7 @@
       .force('link', d3.forceLink(links).id(d => d.id).distance(linkDistance).strength(0.2))
       .force('charge', d3.forceManyBody().strength(chargeStrength).distanceMax(600))
       .force('center', d3.forceCenter(width() / 2, height() / 2).strength(0.03))
-      .force('collision', d3.forceCollide(40))
+      .force('collision', d3.forceCollide(d => nodeRadius(d) + 5))
       .force('radial', d3.forceRadial(
         n => (n.depth || 0) * spreadPx,
         width() / 2, height() / 2
@@ -892,6 +911,16 @@
     radialStrength = this.value / 100;
     document.getElementById('lbl-radial').textContent = radialStrength.toFixed(2);
     if (simulation) { simulation.force('radial').strength(radialStrength); simulation.alpha(0.3).restart(); }
+  });
+
+  document.getElementById('sl-size').addEventListener('input', function () {
+    sizeFactor = this.value / 100;
+    document.getElementById('lbl-size').textContent = sizeFactor.toFixed(2);
+    updateAttributes();
+    if (simulation) {
+      simulation.force('collision', d3.forceCollide(d => nodeRadius(d) + 5));
+      simulation.alpha(0.3).restart();
+    }
   });
 
   document.getElementById('sl-linkdist').addEventListener('input', function () {
