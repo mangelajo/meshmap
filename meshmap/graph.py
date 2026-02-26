@@ -50,6 +50,7 @@ class MeshGraph:
         self._edges: dict[tuple[str, str], GraphEdge] = {}
         self._lock = threading.Lock()
         self.currently_visiting: str | None = None  # transient; not persisted
+        self.currently_trying_route: list[str] = []  # transient; node IDs of active route attempt
 
     # ------------------------------------------------------------------
     # Persistence
@@ -309,4 +310,9 @@ class MeshGraph:
                 }
                 for e in self._edges.values()
             ]
-        return {"nodes": nodes, "links": links, "currently_visiting": self.currently_visiting}
+        return {
+            "nodes": nodes,
+            "links": links,
+            "currently_visiting": self.currently_visiting,
+            "currently_trying_route": self.currently_trying_route,
+        }

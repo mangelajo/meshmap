@@ -64,6 +64,22 @@
       animation: visiting-blink 0.9s ease-in-out infinite;
     }
 
+    /* Route being attempted — animated dashed highlight */
+    @keyframes route-dash {
+      to { stroke-dashoffset: -20; }
+    }
+    .node.on-route circle {
+      stroke: #58a6ff;
+      stroke-width: 3px;
+    }
+    .link-group.on-route .link-path {
+      stroke: #58a6ff !important;
+      stroke-width: 3px !important;
+      stroke-opacity: 1 !important;
+      stroke-dasharray: 6 4;
+      animation: route-dash 0.6s linear infinite;
+    }
+
     /* Status bar */
     #status {
       position: fixed;
@@ -312,6 +328,7 @@
 
   let hoveredNodeId = null;
   let currentlyVisitingId = null;
+  let currentlyTryingRoute = [];  // ordered node IDs of the route being attempted
 
   // Filter / spread state
   let filterMinDepth = 0;
@@ -460,8 +477,22 @@
   // ── DOM-only attribute update (no layout recomputation) ───────────────────
   function updateAttributes() {
     if (!nodeSel || !linkGroupSel) return;
+    const routeSet = new Set(currentlyTryingRoute);
+    // Build set of consecutive route edge pairs for link highlighting
+    const routeEdges = new Set();
+    for (let i = 0; i < currentlyTryingRoute.length - 1; i++) {
+      const a = currentlyTryingRoute[i], b = currentlyTryingRoute[i + 1];
+      routeEdges.add(a < b ? `${a}~${b}` : `${b}~${a}`);
+    }
     nodeSel
-      .classed('visiting', d => d.id === currentlyVisitingId);
+      .classed('visiting', d => d.id === currentlyVisitingId)
+      .classed('on-route', d => routeSet.has(d.id));
+    linkGroupSel
+      .classed('on-route', d => {
+        const s = d.source.id || d.source;
+        const t = d.target.id || d.target;
+        return routeEdges.has(s < t ? `${s}~${t}` : `${t}~${s}`);
+      });
     nodeSel.select('circle')
       .attr('r', nodeRadius)
       .attr('fill', nodeColor)
@@ -546,7 +577,21 @@
   function applyOpacity() {
     if (!nodeSel || !linkGroupSel) return;
 
-    if (hoveredNodeId != null) {
+    if (currentlyTryingRoute.length > 1) {
+      // Route attempt: highlight route nodes + edges, dim everything else
+      const routeSet = new Set(currentlyTryingRoute);
+      const routeEdges = new Set();
+      for (let i = 0; i < currentlyTryingRoute.length - 1; i++) {
+        const a = currentlyTryingRoute[i], b = currentlyTryingRoute[i + 1];
+        routeEdges.add(a < b ? `${a}~${b}` : `${b}~${a}`);
+      }
+      nodeSel.attr('opacity', d => routeSet.has(d.id) ? null : 0.15);
+      linkGroupSel.attr('opacity', d => {
+        const s = d.source.id || d.source, t = d.target.id || d.target;
+        const key = s < t ? `${s}~${t}` : `${t}~${s}`;
+        return routeEdges.has(key) ? null : 0.06;
+      });
+    } else if (hoveredNodeId != null) {
       // Hover: highlight node + direct neighbours, dim everything else
       const connectedIds = new Set([hoveredNodeId]);
       linkGroupSel.each(d => {
@@ -692,6 +737,7 @@
       const data = await res.json();
 
       currentlyVisitingId = data.currently_visiting || null;
+      currentlyTryingRoute = data.currently_trying_route || [];
 
       // Always update status bar counters
       const s = data.stats || {};

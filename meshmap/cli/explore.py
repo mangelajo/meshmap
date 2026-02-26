@@ -403,6 +403,11 @@ async def _login_fetch_logout(
     route_desc = ""
     tried_path_hex: str | None = None  # track which path we already tried
 
+    def _set_route_vis(node_ids: list[str]) -> None:
+        """Update the graph's route visualization (visible in the web UI)."""
+        if graph is not None:
+            graph.currently_trying_route = node_ids
+
     # ── Strategy 1: Graph-computed route ─────────────────────────────────────
     if graph is not None and self_pubkey:
         route = graph.find_route(self_pubkey, target_pk)
@@ -420,10 +425,12 @@ async def _login_fetch_logout(
             else:
                 route_desc = "computed direct path"
                 console.print(f"  [blue]Trying[/blue] {route_desc}")
+            _set_route_vis([self_pubkey, *route, target_pk])
             await mesh.commands.change_contact_path(contact, path_hex)
             logged_in = await _try_login(mesh, contact, password, attempts=3)
             if not logged_in:
                 console.print(f"  [yellow]Failed[/yellow] {route_desc}")
+                _set_route_vis([])
         else:
             console.print("  [dim]No computed path available[/dim]")
 
@@ -446,19 +453,25 @@ async def _login_fetch_logout(
                 )
             else:
                 route_desc = "cached device route [dim](direct)[/dim]"
+            # For device route we only know source + target (no intermediate PKs)
+            _set_route_vis([self_pubkey, target_pk] if self_pubkey else [])
             console.print(f"  [blue]Trying[/blue] {route_desc}")
             logged_in = await _try_login(mesh, contact, password, attempts=2)
             if not logged_in:
                 console.print("  [yellow]Failed[/yellow] cached device route")
+                _set_route_vis([])
 
     # ── Strategy 3: Flood routing ────────────────────────────────────────────
     if not logged_in:
         route_desc = "flood routing"
         console.print(f"  [blue]Trying[/blue] {route_desc}")
+        _set_route_vis([])  # flood has no specific path to show
         await mesh.commands.reset_path(contact)
         logged_in = await _try_login(mesh, contact, password, attempts=2)
         if not logged_in:
             console.print(f"  [yellow]Failed[/yellow] {route_desc}")
+
+    _set_route_vis([])  # clear after all strategies
 
     if not logged_in:
         raise RuntimeError(f"Could not log in to {name!r} after all routing strategies")
