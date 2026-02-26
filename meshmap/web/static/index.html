@@ -256,6 +256,7 @@
     <div class="stat">Visited: <span id="s-visited">0</span></div>
     <div class="stat">Pending: <span id="s-pending">0</span></div>
     <div class="stat">Failed: <span id="s-failed">0</span></div>
+    <div id="s-status" style="margin-top:6px;color:#58a6ff;font-size:11px;min-height:1.4em"></div>
   </div>
 
   <div id="legend">
@@ -746,6 +747,7 @@
       document.getElementById('s-visited').textContent = s.visited ?? '—';
       document.getElementById('s-pending').textContent = s.pending ?? '—';
       document.getElementById('s-failed').textContent = s.failed ?? '—';
+      document.getElementById('s-status').textContent = data.status_message || '';
 
       // Update depth slider bounds if new deeper nodes arrived
       const newMaxDepth = Math.max(0, ...data.nodes.map(n => n.depth || 0));

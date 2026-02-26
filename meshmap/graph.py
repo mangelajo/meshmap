@@ -51,6 +51,7 @@ class MeshGraph:
         self._lock = threading.Lock()
         self.currently_visiting: str | None = None  # transient; not persisted
         self.currently_trying_route: list[str] = []  # transient; node IDs of active route attempt
+        self.status_message: str = ""  # transient; human-readable action for the web UI
 
     # ------------------------------------------------------------------
     # Persistence
@@ -325,4 +326,5 @@ class MeshGraph:
             "links": links,
             "currently_visiting": self.currently_visiting,
             "currently_trying_route": self.currently_trying_route,
+            "status_message": self.status_message,
         }

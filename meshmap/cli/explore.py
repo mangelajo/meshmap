@@ -166,6 +166,7 @@ async def _explore(
         await mesh.ensure_contacts()
 
         # ── Discover 0-hop repeaters ─────────────────────────────────────────
+        graph.status_message = f"Discovering 0-hop repeaters ({wait_time:.0f}s)…"
         console.print(f"[dim]Discovering 0-hop repeaters ({wait_time:.0f}s)…[/dim]")
         scanner = MeshScanner(serial_port, baudrate=baudrate, debug=debug)
         scanner.mesh = mesh  # reuse existing connection
@@ -206,6 +207,7 @@ async def _explore(
         while True:
             pending = graph.next_repeaters_to_visit(refresh=refresh, retry=retry)
             if not pending:
+                graph.status_message = "Exploration complete"
                 console.print("[green]Exploration complete — no more nodes to visit.[/green]")
                 break
 
@@ -220,9 +222,10 @@ async def _explore(
                 console.print(f"[dim]Skipping {label} — depth {node.depth} ≥ {max_depth}[/dim]")
                 continue
 
+            remaining = graph.stats["pending"]
+            graph.status_message = f"Visiting {label} (depth {node.depth}, {remaining} remaining)"
             console.print(
-                f"Visiting [cyan]{label}[/cyan] "
-                f"(depth {node.depth}, {graph.stats['pending']} remaining)…"
+                f"Visiting [cyan]{label}[/cyan] (depth {node.depth}, {remaining} remaining)…"
             )
 
             # Find the contact in the local contact list
@@ -291,9 +294,11 @@ async def _explore(
                 graph.save(output_path)
             finally:
                 graph.currently_visiting = None
+                graph.currently_trying_route = []
 
     except KeyboardInterrupt:
         console.print("\n[yellow]Interrupted — saving graph…[/yellow]")
+        graph.status_message = "Interrupted"
         graph.save(output_path)
     finally:
         if sniffer is not None:
@@ -416,6 +421,11 @@ async def _login_fetch_logout(
         if graph is not None:
             graph.currently_trying_route = node_ids
 
+    def _set_status(msg: str) -> None:
+        """Update the graph's status message (visible in the web UI)."""
+        if graph is not None:
+            graph.status_message = msg
+
     # ── Strategy 1: Graph-computed route (bidir first, then any) ────────────
     if graph is not None and self_pubkey:
         tried_paths: list[str] = []
@@ -443,6 +453,7 @@ async def _login_fetch_logout(
             else:
                 route_desc = f"{label} direct path"
                 console.print(f"  [blue]Trying[/blue] {route_desc}")
+            _set_status(f"Connecting to {name}: {route_desc}")
             _set_route_vis([self_pubkey, *route, target_pk])
             await mesh.commands.change_contact_path(contact, path_hex)
             logged_in = await _try_login(mesh, contact, password, attempts=3)
@@ -466,6 +477,7 @@ async def _login_fetch_logout(
                 route_desc = "original device route [dim](direct)[/dim]"
                 await mesh.commands.reset_path(contact)
             # For device route we only know source + target (no intermediate PKs)
+            _set_status(f"Connecting to {name}: cached device route")
             _set_route_vis([self_pubkey, target_pk] if self_pubkey else [])
             console.print(f"  [blue]Trying[/blue] {route_desc}")
             logged_in = await _try_login(mesh, contact, password, attempts=2)
@@ -477,18 +489,21 @@ async def _login_fetch_logout(
     if not logged_in:
         route_desc = "flood routing"
         console.print(f"  [blue]Trying[/blue] {route_desc}")
+        _set_status(f"Connecting to {name}: flood routing")
         _set_route_vis([])  # flood has no specific path to show
         await mesh.commands.reset_path(contact)
         logged_in = await _try_login(mesh, contact, password, attempts=2)
         if not logged_in:
             console.print(f"  [yellow]Failed[/yellow] {route_desc}")
 
-    _set_route_vis([])  # clear after all strategies
-
     if not logged_in:
+        _set_status(f"Failed to connect to {name}")
+        _set_route_vis([])
         raise RuntimeError(f"Could not log in to {name!r} after all routing strategies")
 
     # ── Fetch phase ──────────────────────────────────────────────────────────
+    _set_status(f"Fetching neighbours from {name}…")
+    _set_route_vis([])
     result = None
     try:
         for attempt in range(1, _fetch_attempts + 1):
@@ -499,6 +514,8 @@ async def _login_fetch_logout(
                 await asyncio.sleep(2)
     finally:
         await mesh.commands.send_logout(contact)
+
+    _set_status("")
 
     if result is None:
         raise RuntimeError(f"No neighbour response from {name!r}")
